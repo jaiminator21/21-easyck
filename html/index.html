@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>easy-ck</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app" class="hidden">
+        <div class="panel">
+            <header class="panel-head">
+                <div class="brand">
+                    <h1 id="t-title">Character Kill</h1>
+                    <p id="t-subtitle">Muerte permanente de personaje</p>
+                </div>
+                <div class="head-right">
+                    <span class="badge" id="framework">-</span>
+                    <button class="icon-btn" id="close" title="ESC">&times;</button>
+                </div>
+            </header>
+
+            <div class="panel-body">
+                <aside class="sidebar">
+                    <div class="tabs">
+                        <button class="tab active" data-tab="online" id="t-tab-online">En línea</button>
+                        <button class="tab" data-tab="all" id="t-tab-all">Todos</button>
+                    </div>
+                    <div class="search">
+                        <input type="text" id="search" autocomplete="off" placeholder="Buscar...">
+                        <button class="ghost-btn" id="refresh" title="Actualizar">⟳</button>
+                    </div>
+                    <div class="list" id="list"></div>
+                    <button class="more-btn hidden" id="more">Cargar más</button>
+                </aside>
+
+                <main class="content">
+                    <div class="empty" id="empty">
+                        <div class="empty-mark">⌖</div>
+                        <h2 id="t-empty-title">Selecciona un jugador</h2>
+                        <p id="t-empty-text"></p>
+                    </div>
+
+                    <div class="preview hidden" id="preview">
+                        <section class="card char-card">
+                            <div class="char-head">
+                                <div>
+                                    <h2 id="char-name">-</h2>
+                                    <div class="chips">
+                                        <span class="chip mono" id="char-id"></span>
+                                        <span class="chip" id="char-status"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="fields" id="char-fields"></div>
+                        </section>
+
+                        <section class="card tables-card">
+                            <div class="card-head">
+                                <h3 id="t-data">Datos que se van a borrar</h3>
+                                <div class="card-head-actions">
+                                    <button class="ghost-btn sm" id="select-all"></button>
+                                    <button class="ghost-btn sm" id="select-none"></button>
+                                </div>
+                            </div>
+                            <div class="tables" id="tables"></div>
+                        </section>
+                    </div>
+
+                    <footer class="actions hidden" id="actions">
+                        <div class="reason-wrap">
+                            <label for="reason" id="t-reason">Motivo del CK</label>
+                            <input type="text" id="reason" maxlength="300" autocomplete="off">
+                        </div>
+                        <div class="total-wrap">
+                            <span class="total-label" id="t-total">Total seleccionado</span>
+                            <span class="total-value" id="total">0</span>
+                        </div>
+                        <button class="kill-btn" id="kill">
+                            <span class="kill-fill" id="kill-fill"></span>
+                            <span class="kill-label" id="kill-label">Mantén pulsado para hacer CK</span>
+                        </button>
+                    </footer>
+                    <p class="warning hidden" id="warning"></p>
+                </main>
+            </div>
+        </div>
+
+        <div class="toast hidden" id="toast"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

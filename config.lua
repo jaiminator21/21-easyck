@@ -11,6 +11,14 @@ Config.Framework = 'auto'
 Config.Command        = 'characterkill'
 Config.ConfirmCommand = 'ckconfirm'
 Config.CancelCommand  = 'ckcancel'
+-- Abre la interfaz con la lista de jugadores y la vista previa de lo que se va a borrar
+Config.MenuCommand    = 'ckmenu'
+-- Tecla por defecto para la interfaz ('' para no asignar ninguna). El jugador puede cambiarla en Ajustes > Teclado.
+Config.MenuKeybind    = ''
+
+-- Escribe en la consola (F8 en el cliente, consola del servidor) cada paso de la
+-- interfaz. Útil si /ckmenu no abre nada.
+Config.Debug = false
 
 -- Segundos que tiene el staff para confirmar el CK
 Config.ConfirmTimeout = 30
@@ -24,6 +32,49 @@ Config.Permissions = {
     Ace = 'easyck.use',
     -- Grupos del framework que también pueden usarlo (ESX getGroup / QBCore HasPermission / ACE group.<nombre>)
     Groups = { 'admin', 'superadmin', 'god' },
+}
+
+-- Vista previa de la interfaz: qué se le muestra al staff antes de confirmar el CK.
+Config.Preview = {
+    -- Filas de detalle que se envían por tabla (el recuento siempre es el total real)
+    MaxRows = 25,
+
+    -- Etiqueta, columnas y estado por defecto de cada tabla. Las tablas que no estén aquí
+    -- salen igualmente con su nombre y su número de filas.
+    --   label   = nombre que se muestra en la interfaz
+    --   columns = columnas del detalle (las que no existan en tu BD se ignoran)
+    --   default = false -> la casilla sale desmarcada, así que NO se borra salvo que el staff la marque.
+    --             Afecta también al comando /characterkill, que respeta estos valores por defecto.
+    -- La tabla principal del personaje siempre se borra y no se puede desmarcar.
+    Tables = {
+        players         = { label = 'Personaje',       columns = { 'citizenid', 'name', 'money', 'job' } },
+        users           = { label = 'Personaje',       columns = { 'identifier', 'firstname', 'lastname', 'accounts' } },
+        characters      = { label = 'Personaje',       columns = { 'charId', 'firstName', 'lastName' } },
+        player_vehicles = { label = 'Vehículos',       columns = { 'plate', 'vehicle', 'garage', 'state' } },
+        owned_vehicles  = { label = 'Vehículos',       columns = { 'plate', 'vehicle', 'type', 'stored' } },
+        vehicles        = { label = 'Vehículos',       columns = { 'plate', 'model', 'stored' } },
+        playerskins     = { label = 'Apariencia',      columns = { 'model' } },
+        player_outfits  = { label = 'Outfits',         columns = { 'outfitname', 'model' } },
+        player_houses   = { label = 'Casas',           columns = { 'house', 'stash' } },
+        properties      = { label = 'Propiedades',     columns = { 'id', 'name' } },
+        owned_properties= { label = 'Propiedades',     columns = { 'name', 'price' } },
+        apartments      = { label = 'Apartamentos',    columns = { 'name', 'type' } },
+        bank_accounts   = { label = 'Cuentas bancarias', columns = { 'account_name', 'account_balance' } },
+        player_groups   = { label = 'Trabajos y bandas', columns = { 'group', 'type', 'grade' } },
+        player_contacts = { label = 'Contactos',       columns = { 'name', 'number' } },
+        player_mails    = { label = 'Correos',         columns = { 'sender', 'subject' } },
+        phone_messages  = { label = 'Mensajes',        columns = { 'number' } },
+        phone_invoices  = { label = 'Facturas',        columns = { 'amount', 'society' } },
+        billing         = { label = 'Facturas',        columns = { 'label', 'amount' } },
+        crypto_transactions = { label = 'Cripto',      columns = { 'title', 'message' } },
+        user_licenses   = { label = 'Licencias',       columns = { 'type' } },
+        addon_account_data    = { label = 'Cuentas',   columns = { 'account_name', 'money' } },
+        addon_inventory_items = { label = 'Inventarios', columns = { 'inventory_name', 'name', 'count' } },
+        datastore_data  = { label = 'Datos guardados', columns = { 'name' } },
+        character_inventory = { label = 'Inventario',  columns = { 'name' } },
+        character_groups    = { label = 'Grupos',      columns = { 'name', 'grade' } },
+        character_licenses  = { label = 'Licencias',   columns = { 'name' } },
+    },
 }
 
 -- Milisegundos que se espera tras expulsar al jugador para que el framework
