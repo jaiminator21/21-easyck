@@ -43,13 +43,25 @@ const LOCALE = {
     reason_req: 'Obligatorio', kill: 'Mantén pulsado para hacer CK', killing: 'Ejecutando CK...',
     close: 'Cerrar', status_online: 'En línea', status_offline: 'Desconectado',
     nothing_selected: 'No has seleccionado ninguna tabla.',
+    detected: 'detectada', no_key: 'sin clave primaria: solo entera',
+    showing: 'mostrando %s de %s', load_rows: 'Cargar todas las filas',
+    loading_rows: 'Cargando filas...', rows_selected: '%s de %s filas',
     irreversible: 'Esta acción borra los datos de la base de datos. Solo se puede revertir a mano desde easy_ck_log.',
     f_name: 'Nombre', f_birth: 'Nacimiento', f_phone: 'Teléfono', f_job: 'Trabajo',
     f_gang: 'Banda', f_cash: 'Efectivo', f_bank: 'Banco', f_crypto: 'Cripto', f_last_seen: 'Último acceso',
 };
 
-function table(name, label, count, columns, rows, extra) {
-    return Object.assign({ table: name, label, count, columns, rows, mode: 'delete', locked: false, selected: true }, extra || {});
+function rows(count, make) {
+    const out = [];
+    for (let i = 1; i <= count; i++) out.push({ id: String(i), cells: make(i) });
+    return out;
+}
+
+function table(name, label, count, columns, sample, extra) {
+    return Object.assign({
+        table: name, label, count, columns, rows: sample, key: 'id',
+        links: ['citizenid'], mode: 'delete', locked: false, discovered: false, selected: true,
+    }, extra || {});
 }
 
 function start() {
@@ -71,24 +83,28 @@ function start() {
             { key: 'f_crypto', value: '3' }, { key: 'f_last_seen', value: '2026-09-19 22:41:02' },
         ],
         tables: [
-            table('players', 'Personaje', 1, ['citizenid', 'name', 'money'],
-                [['ABC12345', 'jaiminator21', '{"cash":4210,"bank":128940}']], { locked: true }),
+            table('players', 'Personaje', 1, ['name', 'money'],
+                [{ id: 'ABC12345', cells: ['jaiminator21', '{"cash":4210,"bank":128940}'] }],
+                { locked: true, key: 'citizenid' }),
             table('player_groups', 'Trabajos y bandas', 3, ['group', 'type', 'grade'],
-                [['police', 'job', '0'], ['vagos', 'gang', '2'], ['unemployed', 'job', '0']]),
+                rows(3, (i) => [['police', 'vagos', 'unemployed'][i - 1], i === 2 ? 'gang' : 'job', String(i)]),
+                { key: null }),
             table('player_vehicles', 'Vehículos', 6, ['plate', 'vehicle', 'garage', 'state'],
-                [['ABC 123', 'sultan', 'legionsquare', '1'], ['DEF 456', 'kuruma', 'pillboxgarage', '0'],
-                 ['GHI 789', 'dominator', 'legionsquare', '1'], ['JKL 012', 'blista', 'impound', '2'],
-                 ['MNO 345', 'faggio', 'legionsquare', '1']]),
-            table('playerskins', 'Apariencia', 1, ['model'], [['mp_m_freemode_01']]),
+                rows(6, (i) => [`ABC 12${i}`, ['sultan', 'kuruma', 'dominator', 'blista', 'faggio', 'sentinel'][i - 1], 'legionsquare', '1']),
+                { open: true }),
+            table('playerskins', 'Apariencia', 1, ['model'], rows(1, () => ['mp_m_freemode_01'])),
             table('player_outfits', 'Outfits', 4, ['outfitname', 'model'],
-                [['Uniforme', 'mp_m_freemode_01'], ['Playa', 'mp_m_freemode_01'],
-                 ['Traje', 'mp_m_freemode_01'], ['Gimnasio', 'mp_m_freemode_01']]),
-            table('properties', 'Propiedades', 2, ['id', 'name'], [['12', 'Mirror Park 4'], ['31', 'Trastero']]),
-            table('phone_messages', 'Mensajes', 184, ['number'], [['555-0101'], ['555-0102'], ['555-0103']], { selected: false }),
-            table('player_contacts', 'Contactos', 42, ['name', 'number'],
-                [['Marta', '555-0102'], ['Taller', '555-0177']], { selected: false }),
-            table('phone_invoices', 'Facturas', 9, ['amount', 'society'], [['1200', 'mechanic']]),
-            table('crypto_transactions', 'Cripto', 5, ['title', 'message'], [['Compra', '+2 QBit']]),
+                rows(4, (i) => [['Uniforme', 'Playa', 'Traje', 'Gimnasio'][i - 1], 'mp_m_freemode_01'])),
+            table('properties', 'Propiedades', 2, ['name'], rows(2, (i) => [['Mirror Park 4', 'Trastero'][i - 1]]),
+                { links: ['owner'] }),
+            table('twitter_accounts', 'twitter_accounts', 2, ['username', 'created'],
+                rows(2, (i) => [['@juanp', '@jp_alt'][i - 1], '2026-04-0' + i]), { discovered: true }),
+            table('npwd_messages', 'npwd_messages', 312, ['body', 'date'],
+                rows(25, (i) => ['nos vemos en el taller', '2026-09-1' + (i % 9)]),
+                { discovered: true, links: ['sender_citizenid', 'receiver_citizenid'] }),
+            table('phone_messages', 'Mensajes', 184, ['number', 'message'],
+                rows(25, (i) => ['555-010' + i, 'a las 22:00']), { selected: false }),
+            table('phone_invoices', 'Facturas', 9, ['amount', 'society'], rows(9, (i) => [String(i * 120), 'mechanic'])),
         ],
     } }, '*'), 60);
 }

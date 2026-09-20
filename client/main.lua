@@ -61,6 +61,10 @@ RegisterNetEvent('easy-ck:ui:preview', function(data)
     SendNUIMessage({ action = 'preview', data = data })
 end)
 
+RegisterNetEvent('easy-ck:ui:rows', function(data)
+    SendNUIMessage({ action = 'rows', data = data })
+end)
+
 RegisterNetEvent('easy-ck:ui:result', function(data)
     SendNUIMessage({ action = 'result', data = data })
 end)
@@ -86,6 +90,11 @@ end)
 
 RegisterNUICallback('preview', function(data, cb)
     TriggerServerEvent('easy-ck:ui:preview', tostring(data.target or ''))
+    cb(1)
+end)
+
+RegisterNUICallback('rows', function(data, cb)
+    TriggerServerEvent('easy-ck:ui:rows', tostring(data.table or ''), tostring(data.charId or ''))
     cb(1)
 end)
 

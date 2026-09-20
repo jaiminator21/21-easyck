@@ -30,9 +30,19 @@ local function hasPermission(src)
     return Bridge.hasGroup(src) == true
 end
 
--- Los nombres de tabla/columna vienen de config.lua; se validan igualmente.
+-- Nombres de tabla y de columna entre acentos graves. MySQL admite ahí casi
+-- cualquier cosa (guiones, espacios, puntos), así que los recursos que se llaman
+-- `21-robberies_evidence` valen; lo que no se acepta es un acento grave ni
+-- caracteres de control, que es lo único con lo que se podría escapar de las comillas.
+local function quotable(name)
+    return type(name) == 'string'
+        and name ~= ''
+        and #name <= 64
+        and not name:find('[%c`]') -- %c = caracteres de control
+end
+
 local function ident(name)
-    assert(type(name) == 'string' and name:match('^[%w_]+$'), ('Identificador SQL no válido: %s'):format(tostring(name)))
+    assert(quotable(name), ('Identificador SQL no válido: %s'):format(tostring(name)))
     return '`' .. name .. '`'
 end
 
@@ -48,20 +58,63 @@ local function tableExists(name)
     return existsCache[name]
 end
 
+-- Columnas de una tabla: nombre, tipo y si forma parte de la clave primaria.
+-- Se consulta una sola vez por tabla.
 local columnsCache = {}
-local function columnsOf(name)
+local function tableColumns(name)
     if not columnsCache[name] then
         local rows = MySQL.query.await(
-            'SELECT column_name AS c FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?',
+            [[SELECT column_name AS c, data_type AS t, column_key AS k
+              FROM information_schema.columns
+              WHERE table_schema = DATABASE() AND table_name = ?
+              ORDER BY ordinal_position]],
             { name }
         ) or {}
-        local set = {}
+
+        local set, list, keys = {}, {}, {}
         for _, row in ipairs(rows) do
-            set[row.c or row.column_name] = true
+            local column = row.c or row.column_name
+            local kind = tostring(row.t or row.data_type or ''):lower()
+            set[column] = true
+            list[#list + 1] = { name = column, kind = kind }
+            if tostring(row.k or row.column_key or ''):upper() == 'PRI' then
+                keys[#keys + 1] = column
+            end
         end
-        columnsCache[name] = set
+
+        columnsCache[name] = { set = set, list = list, keys = keys }
     end
     return columnsCache[name]
+end
+
+local function columnsOf(name)
+    return tableColumns(name).set
+end
+
+-- Solo se pueden borrar filas sueltas si la tabla tiene una clave primaria de una
+-- sola columna; con claves compuestas o sin clave, la tabla va entera o no va.
+local function primaryKeyOf(name)
+    local keys = tableColumns(name).keys
+    return #keys == 1 and keys[1] or nil
+end
+
+-- Columnas que se enseñan en el detalle de una tabla detectada automáticamente:
+-- las primeras que no sean un campo enorme.
+local SKIP_TYPES = { blob = true, longblob = true, mediumblob = true, tinyblob = true,
+                     json = true, longtext = true, mediumtext = true }
+
+local function autoColumns(name, links)
+    local isLink = {}
+    for _, column in ipairs(links or {}) do isLink[column] = true end
+
+    local picked = {}
+    for _, column in ipairs(tableColumns(name).list) do
+        if not isLink[column.name] and not SKIP_TYPES[column.kind] then
+            picked[#picked + 1] = column.name
+            if #picked == 4 then break end
+        end
+    end
+    return picked
 end
 
 local function previewConfig(name)
@@ -71,6 +124,245 @@ end
 -- Una tabla se borra por defecto salvo que en Config.Preview.Tables tenga default = false.
 local function selectedByDefault(name)
     return previewConfig(name).default ~= false
+end
+
+-- Valor tal y como se enseña en la interfaz.
+local function cell(value)
+    if value == nil then return '' end
+    if type(value) == 'table' then value = json.encode(value) end
+    value = tostring(value)
+    if #value > 140 then value = value:sub(1, 140) .. '…' end
+    return value
+end
+
+---------------------------------------------------------------------------
+-- Escaneo de la base de datos
+---------------------------------------------------------------------------
+
+-- Busca en TODA la base de datos cualquier columna que pueda contener el ID del
+-- personaje: por patrón en el nombre (citizenid, owner_citizenid, target_cid...)
+-- y por nombres exactos. Una tabla puede tener varias (emisor y receptor, por
+-- ejemplo) y se quedan todas. Se consulta una sola vez por arranque.
+local discoveryCache
+local function discoverTables()
+    if not (Config.Discovery and Config.Discovery.Enabled) then return {} end
+    if discoveryCache then return discoveryCache end
+    discoveryCache = {}
+
+    local conditions, params = {}, {}
+
+    -- El nombre de la columna principal del framework siempre cuenta.
+    local patterns, seen = {}, {}
+    local function addPattern(value)
+        value = tostring(value or ''):lower()
+        if value ~= '' and not seen[value] then
+            seen[value] = true
+            patterns[#patterns + 1] = value
+        end
+    end
+    addPattern(Bridge.mainTable.column)
+    for _, pattern in ipairs(Config.Discovery.Patterns or {}) do addPattern(pattern) end
+
+    for _, pattern in ipairs(patterns) do
+        conditions[#conditions + 1] = 'LOWER(col.column_name) LIKE ?'
+        params[#params + 1] = '%' .. pattern .. '%'
+    end
+
+    local exact = {}
+    for _, column in ipairs(Config.Discovery.Columns or {}) do
+        local lower = tostring(column):lower()
+        if lower ~= '' then exact[#exact + 1] = lower end
+    end
+    if #exact > 0 then
+        conditions[#conditions + 1] = ('LOWER(col.column_name) IN (%s)'):format(string.rep('?', #exact, ', '))
+        for _, column in ipairs(exact) do params[#params + 1] = column end
+    end
+
+    if #conditions == 0 then return discoveryCache end
+
+    local ignore = {}
+    for _, name in ipairs(Config.Discovery.Ignore or {}) do
+        ignore[tostring(name):lower()] = true
+    end
+    for _, t in ipairs(Bridge.tables) do
+        ignore[t.table:lower()] = true -- ya está en Config.Tables, con su etiqueta y su orden
+    end
+
+    local ok, rows = pcall(MySQL.query.await, ([[
+        SELECT col.table_name AS t, col.column_name AS c
+        FROM information_schema.columns col
+        JOIN information_schema.tables tbl
+          ON tbl.table_schema = col.table_schema AND tbl.table_name = col.table_name
+        WHERE col.table_schema = DATABASE()
+          AND tbl.table_type = 'BASE TABLE'
+          AND (%s)
+        ORDER BY col.table_name, col.ordinal_position
+    ]]):format(table.concat(conditions, ' OR ')), params)
+
+    if not ok then
+        print(('[easy-ck] ^3No se ha podido escanear la base de datos: %s^0'):format(tostring(rows)))
+        return discoveryCache
+    end
+
+    local byTable, order = {}, {}
+    for _, row in ipairs(rows or {}) do
+        local name = tostring(row.t or row.table_name or '')
+        local column = tostring(row.c or row.column_name or '')
+        if quotable(name) and quotable(column) and not ignore[name:lower()] then
+            if not byTable[name] then
+                byTable[name] = { table = name, column = column, columns = {}, discovered = true }
+                order[#order + 1] = name
+            end
+            local columns = byTable[name].columns
+            columns[#columns + 1] = column
+        end
+    end
+
+    table.sort(order)
+    for _, name in ipairs(order) do
+        discoveryCache[#discoveryCache + 1] = byTable[name]
+    end
+
+    if Config.Debug then
+        local names = {}
+        for _, entry in ipairs(discoveryCache) do
+            names[#names + 1] = ('%s(%s)'):format(entry.table, table.concat(entry.columns, ','))
+        end
+        print(('[easy-ck] escaneo: %s tablas con vínculo al personaje además de las configuradas: %s')
+            :format(#discoveryCache, table.concat(names, ' ')))
+    end
+
+    return discoveryCache
+end
+
+-- Tablas configuradas (en su orden) + las detectadas. Es la lista con la que se
+-- pinta la vista previa y con la que se borra.
+local function targetTables()
+    local list = {}
+    for _, t in ipairs(Bridge.tables) do
+        if tableExists(t.table) then list[#list + 1] = t end
+    end
+    for _, t in ipairs(discoverTables()) do
+        list[#list + 1] = t
+    end
+    return list
+end
+
+-- Columnas de una tabla que apuntan al personaje. Las configuradas tienen una;
+-- las detectadas pueden tener varias (emisor y receptor de un mensaje, por ejemplo).
+local function linkColumns(entry)
+    return entry.columns or { entry.column }
+end
+
+local function whereFor(entry)
+    local parts = {}
+    for _, column in ipairs(linkColumns(entry)) do
+        parts[#parts + 1] = ident(column) .. ' = ?'
+    end
+
+    local where = #parts > 1 and ('(' .. table.concat(parts, ' OR ') .. ')') or parts[1]
+    if entry.main and entry.filter then
+        where = where .. ' AND (' .. entry.filter .. ')'
+    end
+    return where
+end
+
+-- Un valor del ID por cada columna de la condición, en el mismo orden.
+local function paramsFor(entry, charId)
+    local params = {}
+    for _ = 1, #linkColumns(entry) do
+        params[#params + 1] = charId
+    end
+    return params
+end
+
+-- Cuenta las filas de todas las tablas de golpe: una consulta por cada 15 tablas
+-- en vez de una por tabla, que con una base de datos grande se nota.
+local function countRows(entries, charId)
+    local counts = {}
+    local selects, params, chunk = {}, {}, {}
+
+    local function flush()
+        if #chunk == 0 then return end
+        local ok, row = pcall(MySQL.single.await, 'SELECT ' .. table.concat(selects, ', '), params)
+        if ok and row then
+            for index, entry in ipairs(chunk) do
+                counts[entry.table] = tonumber(row['c' .. index]) or 0
+            end
+        else
+            for _, entry in ipairs(chunk) do
+                local okOne, count = pcall(MySQL.scalar.await,
+                    ('SELECT COUNT(*) FROM %s WHERE %s'):format(ident(entry.table), whereFor(entry)),
+                    paramsFor(entry, charId))
+                counts[entry.table] = okOne and (tonumber(count) or 0) or 0
+            end
+        end
+        selects, params, chunk = {}, {}, {}
+    end
+
+    for _, entry in ipairs(entries) do
+        chunk[#chunk + 1] = entry
+        selects[#selects + 1] = ('(SELECT COUNT(*) FROM %s WHERE %s) AS c%d'):format(
+            ident(entry.table), whereFor(entry), #chunk)
+        for _, param in ipairs(paramsFor(entry, charId)) do
+            params[#params + 1] = param
+        end
+        if #chunk >= 15 then flush() end
+    end
+    flush()
+
+    return counts
+end
+
+-- Filas de una tabla para la interfaz: la clave primaria (para poder marcar filas
+-- sueltas) y unas pocas columnas legibles.
+local function fetchRows(entry, charId, limit)
+    local info = tableColumns(entry.table)
+    local key = primaryKeyOf(entry.table)
+    local configured = previewConfig(entry.table).columns
+
+    local columns = {}
+    for _, column in ipairs(configured or {}) do
+        if info.set[column] then columns[#columns + 1] = column end
+    end
+    if #columns == 0 then
+        columns = autoColumns(entry.table, linkColumns(entry))
+    end
+
+    local selects, seen = {}, {}
+    if key then
+        selects[#selects + 1] = ident(key)
+        seen[key] = true
+    end
+    for _, column in ipairs(columns) do
+        if not seen[column] then
+            selects[#selects + 1] = ident(column)
+            seen[column] = true
+        end
+    end
+    if #selects == 0 then return columns, {}, key end
+
+    local ok, rows = pcall(MySQL.query.await,
+        ('SELECT %s FROM %s WHERE %s LIMIT %d'):format(
+            table.concat(selects, ', '), ident(entry.table), whereFor(entry), limit),
+        paramsFor(entry, charId))
+    if not ok then
+        print(('[easy-ck] ^3No se han podido leer las filas de %s: %s^0'):format(entry.table, tostring(rows)))
+        return columns, {}, key
+    end
+
+    local out = {}
+    for _, row in ipairs(rows or {}) do
+        local cells = {}
+        for index, column in ipairs(columns) do
+            cells[index] = cell(row[column])
+        end
+        out[#out + 1] = {
+            id = (key and row[key] ~= nil) and tostring(row[key]) or nil,
+            cells = cells,
+        }
+    end
+    return columns, out, key
 end
 
 local function normalizeId(value)
@@ -172,48 +464,82 @@ local function executeCK(data, staffSrc)
             Wait(Config.SaveDelay)
         end
 
-        -- 2. Tablas secundarias primero y la principal al final (por claves foráneas).
-        --    Solo las seleccionadas: data.tables es un conjunto { ['player_vehicles'] = true, ... }.
-        --    Sin selección se usan los valores por defecto de Config.Preview.
+        -- 2. Qué se toca: tablas configuradas + detectadas, las secundarias primero y
+        --    la principal al final (por las claves foráneas).
+        --    data.tables es { ['player_vehicles'] = true }  -> la tabla entera
+        --                   { ['player_vehicles'] = { ids = { '4', '9' } } } -> solo esas filas
+        --    Sin selección se usan los valores por defecto de la configuración.
         local selection = data.tables
-        local ordered, kept = {}, {}
-        for _, t in ipairs(Bridge.tables) do
-            if not t.main and tableExists(t.table) then
-                local wanted = selection and selection[t.table] == true or (not selection and selectedByDefault(t.table))
+        local ordered, kept, partial = {}, {}, {}
+
+        for _, t in ipairs(targetTables()) do
+            if not t.main then
+                local choice = selection and selection[t.table]
+                local wanted
+                if selection then
+                    wanted = choice ~= nil and choice ~= false
+                elseif t.discovered then
+                    wanted = (Config.Discovery or {}).DefaultSelected ~= false
+                else
+                    wanted = selectedByDefault(t.table)
+                end
+
                 if wanted then
-                    ordered[#ordered + 1] = t
+                    local ids = type(choice) == 'table' and choice.ids or nil
+                    ordered[#ordered + 1] = { entry = t, ids = ids }
+                    if ids then
+                        partial[#partial + 1] = ('%s (%d)'):format(t.table, #ids)
+                    end
                 else
                     kept[#kept + 1] = t.table
                 end
             end
         end
-        ordered[#ordered + 1] = Bridge.mainTable
+        ordered[#ordered + 1] = { entry = Bridge.mainTable }
+
+        -- Cada consulta va siempre acotada al personaje, aunque se borren filas
+        -- sueltas: así una lista de IDs manipulada no puede tocar a otro jugador.
+        local function clauseFor(job)
+            local where = whereFor(job.entry)
+            local params = paramsFor(job.entry, data.charId)
+            if job.ids and #job.ids > 0 then
+                local key = primaryKeyOf(job.entry.table)
+                if key then
+                    where = where .. (' AND %s IN (%s)'):format(ident(key), string.rep('?', #job.ids, ', '))
+                    for _, id in ipairs(job.ids) do params[#params + 1] = id end
+                end
+            end
+            return where, params
+        end
 
         -- 3. Copia de seguridad de todo lo que se va a tocar.
         local backup = {}
         if Config.Backup then
-            for _, t in ipairs(ordered) do
+            for _, job in ipairs(ordered) do
+                local where, params = clauseFor(job)
                 local okSelect, rows = pcall(MySQL.query.await,
-                    ('SELECT * FROM %s WHERE %s = ?'):format(ident(t.table), ident(t.column)), { data.charId })
+                    ('SELECT * FROM %s WHERE %s'):format(ident(job.entry.table), where), params)
                 if okSelect and rows and #rows > 0 then
-                    backup[t.table] = rows
+                    backup[job.entry.table] = rows
                 elseif not okSelect then
-                    print(('[easy-ck] ^3No se pudo copiar %s: %s^0'):format(t.table, tostring(rows)))
+                    print(('[easy-ck] ^3No se pudo copiar %s: %s^0'):format(job.entry.table, tostring(rows)))
                 end
             end
         end
 
         -- 4. Borrado.
         local affected, mainAffected = 0, 0
-        for _, t in ipairs(ordered) do
+        for _, job in ipairs(ordered) do
+            local t = job.entry
+            local where, params = clauseFor(job)
             local query
             if t.update then
-                query = ('UPDATE %s SET %s WHERE %s = ?'):format(ident(t.table), t.update, ident(t.column))
+                query = ('UPDATE %s SET %s WHERE %s'):format(ident(t.table), t.update, where)
             else
-                query = ('DELETE FROM %s WHERE %s = ?'):format(ident(t.table), ident(t.column))
+                query = ('DELETE FROM %s WHERE %s'):format(ident(t.table), where)
             end
 
-            local okQuery, count = pcall(MySQL.update.await, query, { data.charId })
+            local okQuery, count = pcall(MySQL.update.await, query, params)
             if okQuery then
                 affected = affected + (tonumber(count) or 0)
                 if t == Bridge.mainTable then mainAffected = tonumber(count) or 0 end
@@ -228,7 +554,10 @@ local function executeCK(data, staffSrc)
 
         -- 5. Registro.
         local staffName, staffLicense = staffInfo(staffSrc)
-        local keptList = #kept > 0 and table.concat(kept, ', ') or nil
+        local notes = {}
+        if #kept > 0 then notes[#notes + 1] = table.concat(kept, ', ') end
+        if #partial > 0 then notes[#notes + 1] = 'parcial: ' .. table.concat(partial, ', ') end
+        local keptList = #notes > 0 and table.concat(notes, ' | ') or nil
         MySQL.insert.await(
             'INSERT INTO easy_ck_log (char_id, char_name, framework, reason, staff_name, staff_license, kept_tables, backup) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             { key, data.name, Bridge.name, data.reason, staffName, staffLicense, keptList, Config.Backup and json.encode(backup) or nil }
@@ -462,15 +791,8 @@ local function listCharacters(search, offset, limit)
     return list, #rows == limit
 end
 
-local function cell(value)
-    if value == nil then return '' end
-    if type(value) == 'table' then value = json.encode(value) end
-    value = tostring(value)
-    if #value > 140 then value = value:sub(1, 140) .. '…' end
-    return value
-end
-
--- Todo lo que se va a borrar del personaje, tabla por tabla.
+-- Todo lo que se va a borrar del personaje, tabla por tabla. Incluye las tablas
+-- configuradas y las que aparecen al escanear la base de datos.
 local function buildPreview(charId)
     local row = fetchCharacter(charId)
     if not row then
@@ -492,49 +814,43 @@ local function buildPreview(charId)
         tables = {},
     }
 
-    for _, t in ipairs(Bridge.tables) do
-        if tableExists(t.table) then
-            local cfg = previewConfig(t.table)
-            local tableCols = columnsOf(t.table)
-            local where = ident(t.column) .. ' = ?'
-            if t.main and t.filter then
-                where = where .. ' AND (' .. t.filter .. ')'
+    local entries = targetTables()
+    local counts = countRows(entries, charId)
+
+    for _, entry in ipairs(entries) do
+        local count = counts[entry.table] or 0
+
+        -- Las configuradas salen siempre (aunque estén vacías, para que se vea que se
+        -- han mirado). Las detectadas solo si tienen filas de este personaje: si no,
+        -- serían decenas de tablas a cero.
+        if not entry.discovered or count > 0 then
+            local cfg = previewConfig(entry.table)
+            local columns, rows, key = {}, {}, primaryKeyOf(entry.table)
+            if count > 0 then
+                columns, rows, key = fetchRows(entry, charId, maxRows)
             end
 
-            local okCount, count = pcall(MySQL.scalar.await,
-                ('SELECT COUNT(*) FROM %s WHERE %s'):format(ident(t.table), where), { charId })
-            count = okCount and (tonumber(count) or 0) or 0
-
-            local columns = {}
-            for _, col in ipairs(cfg.columns or {}) do
-                if tableCols[col] then columns[#columns + 1] = col end
-            end
-
-            local rows = {}
-            if count > 0 and #columns > 0 then
-                local select = {}
-                for _, col in ipairs(columns) do select[#select + 1] = ident(col) end
-                local okRows, result = pcall(MySQL.query.await,
-                    ('SELECT %s FROM %s WHERE %s LIMIT %d'):format(
-                        table.concat(select, ', '), ident(t.table), where, maxRows), { charId })
-                if okRows then
-                    for _, r in ipairs(result or {}) do
-                        local cells = {}
-                        for i, col in ipairs(columns) do cells[i] = cell(r[col]) end
-                        rows[#rows + 1] = cells
-                    end
-                end
+            local selected
+            if entry.main then
+                selected = true
+            elseif entry.discovered then
+                selected = (Config.Discovery or {}).DefaultSelected ~= false
+            else
+                selected = selectedByDefault(entry.table)
             end
 
             preview.tables[#preview.tables + 1] = {
-                table = t.table,
-                label = cfg.label or t.table,
+                table = entry.table,
+                label = cfg.label or entry.table,
+                links = linkColumns(entry),          -- columnas por las que está vinculado al personaje
                 count = count,
                 columns = columns,
                 rows = rows,
-                mode = t.update and 'update' or 'delete',
-                locked = t.main == true,             -- la tabla principal siempre se borra
-                selected = t.main == true or selectedByDefault(t.table),
+                key = key,                           -- sin clave primaria no hay filas sueltas
+                mode = entry.update and 'update' or 'delete',
+                locked = entry.main == true,         -- la tabla principal siempre se borra entera
+                discovered = entry.discovered == true,
+                selected = selected,
             }
         end
     end
@@ -542,18 +858,41 @@ local function buildPreview(charId)
     return preview
 end
 
--- Nunca se hace caso a la lista de tablas del cliente sin validarla contra la config.
+-- Nunca se hace caso a lo que manda el cliente sin validarlo: la tabla tiene que
+-- existir en la configuración o en el escaneo, y los IDs de fila tienen que ser
+-- valores sueltos. El borrado por filas siempre se acota además al personaje.
+local MAX_IDS = 5000
+
 local function sanitizeSelection(list)
     local allowed = {}
-    for _, t in ipairs(Bridge.tables) do allowed[t.table] = true end
+    for _, entry in ipairs(targetTables()) do allowed[entry.table] = entry end
 
     local selection = {}
     if type(list) == 'table' then
-        for _, name in ipairs(list) do
-            if type(name) == 'string' and allowed[name] then selection[name] = true end
+        for _, item in ipairs(list) do
+            local name = type(item) == 'table' and item.table or item
+            local entry = type(name) == 'string' and allowed[name] or nil
+
+            if entry then
+                local ids = type(item) == 'table' and item.ids or nil
+                if type(ids) == 'table' and #ids > 0 and primaryKeyOf(name) then
+                    local clean = {}
+                    for _, id in ipairs(ids) do
+                        local kind = type(id)
+                        if (kind == 'string' and #id <= 100) or kind == 'number' then
+                            clean[#clean + 1] = tostring(id)
+                            if #clean >= MAX_IDS then break end
+                        end
+                    end
+                    selection[name] = #clean > 0 and { ids = clean } or nil
+                else
+                    selection[name] = true
+                end
+            end
         end
     end
-    selection[Bridge.mainTable.table] = true
+
+    selection[Bridge.mainTable.table] = true -- el personaje siempre se borra entero
     return selection
 end
 
@@ -603,7 +942,11 @@ RegisterNetEvent('easy-ck:ui:preview', function(target)
             return TriggerClientEvent('easy-ck:ui:preview', src, { error = err })
         end
 
-        local preview, previewErr = buildPreview(charId)
+        local okPreview, preview, previewErr = pcall(buildPreview, charId)
+        if not okPreview then
+            print(('[easy-ck] ^1Error al preparar la vista previa: %s^0'):format(tostring(preview)))
+            return TriggerClientEvent('easy-ck:ui:preview', src, { error = L('failed', tostring(preview)) })
+        end
         if not preview then
             return TriggerClientEvent('easy-ck:ui:preview', src, { error = previewErr })
         end
@@ -615,6 +958,36 @@ RegisterNetEvent('easy-ck:ui:preview', function(target)
             expires = os.time() + 600,
         }
         TriggerClientEvent('easy-ck:ui:preview', src, preview)
+    end)
+end)
+
+-- "Cargar todas las filas" de una tabla concreta, para poder marcarlas una a una.
+RegisterNetEvent('easy-ck:ui:rows', function(tableName, charId)
+    local src = source
+    if not uiAllowed(src, 'rows') then return end
+    if type(tableName) ~= 'string' or tableName == '' or #tableName > 80 then return end
+
+    local pendingData = uiPending[src]
+    if not pendingData or tostring(pendingData.charId) ~= tostring(charId) then return end
+
+    CreateThread(function()
+        local entry
+        for _, candidate in ipairs(targetTables()) do
+            if candidate.table == tableName then
+                entry = candidate
+                break
+            end
+        end
+        if not entry then return end
+
+        local limit = (Config.Preview and Config.Preview.MaxRowsExpanded) or 500
+        local columns, rows, key = fetchRows(entry, pendingData.charId, limit)
+        TriggerClientEvent('easy-ck:ui:rows', src, {
+            table = tableName,
+            columns = columns,
+            rows = rows,
+            key = key,
+        })
     end)
 end)
 

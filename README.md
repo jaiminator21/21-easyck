@@ -5,8 +5,9 @@ Script **standalone** de FiveM para hacer **CK (Character Kill / muerte permanen
 ## Características
 
 - **Interfaz** (`/ckmenu`) con la lista de jugadores conectados y la lista completa de personajes de la base de datos, con buscador.
-- **Vista previa de todo lo que se va a borrar** antes de confirmar: vehículos, outfits, cuentas, contactos, mensajes… con el número de filas y una muestra de cada tabla.
-- **Casillas por tabla** para elegir qué se borra y qué se conserva (por ejemplo dejar intactos los mensajes del teléfono o las redes sociales).
+- **Escanea toda la base de datos**: no se limita a una lista de tablas, busca el ID del personaje en cualquier columna de cualquier tabla (teléfono, redes sociales, casas, tatuajes, facturas…) y enseña todas las que tienen filas suyas.
+- **Vista previa de todo lo que se va a borrar** antes de confirmar, con el número de filas y una muestra de los datos de cada tabla.
+- **Casillas por tabla y por fila**: puedes conservar una tabla entera (las RRSS, los mensajes del teléfono) o borrar solo algunas filas dentro de una tabla (dos coches de seis).
 - Detección automática del framework (`Config.Framework = 'auto'`).
 - `/characterkill <id>` acepta el **ID en línea** del jugador o el **ID del personaje** (`citizenid` en QB/Qbox, `identifier` en ESX, `charId` en ox_core). Así se puede hacer CK a personajes desconectados.
 - **Confirmación en dos pasos** (`/ckconfirm`, `/ckcancel`) con tiempo límite.
@@ -66,7 +67,35 @@ También funciona desde la consola del servidor (`characterkill 12`, `ckconfirm`
   (matrículas, nombres de outfits, saldos…). El tamaño de la muestra es `Config.Preview.MaxRows`.
 - Cada tabla tiene una casilla. Lo que quede desmarcado **no se toca**. La tabla principal del
   personaje siempre se borra y no se puede desmarcar.
+- Dentro de cada tabla, **cada fila tiene su casilla**. Al desmarcar una fila, la tabla pasa a
+  "solo estas filas" y el contador lo indica (`4 de 6 filas`). Si la tabla tiene más filas de las
+  que se muestran, hay un botón para cargarlas todas (hasta `Config.Preview.MaxRowsExpanded`).
+- Las filas sueltas solo se pueden marcar si la tabla tiene una clave primaria de una sola
+  columna. Si no la tiene, se avisa en la propia fila y la tabla va entera o no va.
 - El CK se lanza manteniendo pulsado el botón, para que no salga por un clic de más.
+
+### Qué tablas salen
+
+No hace falta que mantengas una lista. Al arrancar, easy-ck pregunta a la base de datos qué
+tablas tienen alguna columna que pueda contener el ID del personaje y, en cada CK, cuenta
+cuántas filas de ese personaje hay en cada una. Las que tienen filas salen en la interfaz
+marcadas como `detectada`; las que no, no se enseñan.
+
+Se considera un vínculo cualquier columna cuyo nombre **contenga** uno de los patrones de
+`Config.Discovery.Patterns` (`citizenid`, `charid`, `identifier`, `cid`…), más los nombres
+exactos de `Config.Discovery.Columns` (`owner`, `holder`, `player`…). Al nombre de la columna
+principal de tu framework se le añade solo. Si una tabla tiene varias columnas válidas —los
+mensajes del teléfono suelen tener emisor y receptor— se usan todas.
+
+Que sobren patrones no molesta: lo que se busca es el **valor** del ID del personaje, así que
+una columna que no lo contenga sale con 0 filas y no aparece.
+
+Lo que sí conviene revisar es `Config.Discovery.Ignore`. Ahí están por defecto las tablas de
+baneos y de avisos del staff: si se borraran con el CK, cualquiera se quitaría un baneo
+haciéndose un personaje nuevo. Quita de esa lista lo que sí quieras que se borre.
+
+`Config.Tables` sigue existiendo para las tablas principales de cada framework: les da orden,
+etiqueta en español y las columnas del detalle. El escaneo es lo que va por encima.
 
 ### Elegir qué se borra
 
@@ -81,9 +110,9 @@ player_contacts = { label = 'Contactos', columns = { 'name', 'number' }, default
 Salen desmarcadas en la interfaz y el comando `/characterkill` también las respeta, así que solo
 se borran si el staff las marca a mano.
 
-Para que una tabla aparezca en la interfaz tiene que estar en `Config.Tables` del framework que
-uses. Lo de `Config.Preview.Tables` es solo la etiqueta, las columnas del detalle y el valor por
-defecto de la casilla.
+`Config.Preview.Tables` es solo la etiqueta, las columnas del detalle y el valor por defecto de
+la casilla. Una tabla que no esté ahí aparece igualmente si el escaneo la encuentra, con su
+nombre y unas columnas elegidas automáticamente.
 
 ## Frameworks
 
@@ -111,11 +140,23 @@ end)
 
 ## Restaurar un CK
 
-Cada CK guarda en `easy_ck_log.backup` un JSON con este formato: `{ "tabla": [filas...] }`. Si hace falta revertir un CK, puedes reinsertar esas filas a mano. La columna `easy_ck_log.kept_tables` indica qué tablas se dejaron sin tocar en ese CK.
+Cada CK guarda en `easy_ck_log.backup` un JSON con este formato: `{ "tabla": [filas...] }`, con
+exactamente las filas que se borraron. Si hace falta revertir un CK, puedes reinsertarlas a mano.
+La columna `easy_ck_log.kept_tables` indica qué tablas se dejaron sin tocar y cuáles se borraron
+solo en parte.
 
 ## Prueba de humo
 
-`lua tools/smoke.lua` recorre el flujo entero (interfaz, listados, vista previa, CK con selección
-parcial y export) con un servidor y una base de datos simulados. No necesita FiveM ni MySQL.
+`lua tools/smoke.lua` recorre el flujo entero (interfaz, listados, escaneo de la base de datos,
+vista previa, CK con selección de tablas y de filas sueltas, y export) con un servidor y una base
+de datos simulados. No necesita FiveM ni MySQL.
+
+`tools/demo.html` abre la interfaz en el navegador con datos de ejemplo, para tocar el diseño sin
+levantar el servidor:
+
+```
+python3 -m http.server 8000
+# http://localhost:8000/tools/demo.html
+```
 
 > ⚠️ Prueba el script primero en una base de datos de desarrollo y revisa que la lista de tablas coincida con tu servidor. El borrado es real.

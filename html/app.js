@@ -160,7 +160,15 @@ function renderPreview() {
     if (!preview) return;
 
     state.target = preview.charId;
-    state.selection = new Set(preview.tables.filter((tbl) => tbl.selected || tbl.locked).map((tbl) => tbl.table));
+
+    // Por cada tabla: 'all' (entera), 'rows' (solo las filas marcadas) o 'none'.
+    state.selection = new Map();
+    for (const table of preview.tables) {
+        state.selection.set(table.table, {
+            mode: (table.selected || table.locked) ? 'all' : 'none',
+            ids: new Set(),
+        });
+    }
 
     $('empty').classList.add('hidden');
     $('preview').classList.remove('hidden');
@@ -188,53 +196,120 @@ function renderPreview() {
     renderList();
 }
 
+function tableState(name) {
+    if (!state.selection.has(name)) state.selection.set(name, { mode: 'none', ids: new Set() });
+    return state.selection.get(name);
+}
+
+function selectedCount(table) {
+    const selection = tableState(table.table);
+    if (selection.mode === 'all') return table.count;
+    if (selection.mode === 'rows') return selection.ids.size;
+    return 0;
+}
+
 function renderTables() {
     const container = $('tables');
     container.innerHTML = '';
 
     for (const table of state.preview.tables) {
-        const selected = state.selection.has(table.table);
-        const row = document.createElement('div');
-        row.className = 'table-row' + (selected ? '' : ' off');
-
-        const rowsLabel = `${table.count} ${table.count === 1 ? t('row', '') : t('rows', '')}`;
-        const countClass = table.count === 0 ? '' : (table.mode === 'update' ? ' soft' : ' has');
-        const sub = table.locked
-            ? `${table.table} · ${t('locked', '')}`
-            : (table.mode === 'update' ? `${table.table} · ${t('soft_delete', '')}` : table.table);
-
-        row.innerHTML = `
-            <div class="table-main">
-                <div class="check${selected ? ' on' : ''}${table.locked ? ' locked' : ''}">✓</div>
-                <div class="table-name">
-                    <div class="table-label">${escapeHtml(table.label)}</div>
-                    <div class="table-sub">${escapeHtml(sub)}</div>
-                </div>
-                <span class="count${countClass}">${escapeHtml(rowsLabel)}</span>
-                <span class="caret">${table.count ? '›' : ''}</span>
-            </div>
-            <div class="rows">${rowsHtml(table)}</div>`;
-
-        const check = row.querySelector('.check');
-        check.addEventListener('click', (event) => {
-            event.stopPropagation();
-            if (table.locked) return;
-            if (state.selection.has(table.table)) {
-                state.selection.delete(table.table);
-            } else {
-                state.selection.add(table.table);
-            }
-            renderTables();
-        });
-
-        if (table.count) {
-            row.querySelector('.table-main').addEventListener('click', () => row.classList.toggle('open'));
-        }
-
-        container.appendChild(row);
+        container.appendChild(renderTable(table));
     }
 
     updateTotal();
+}
+
+function renderTable(table) {
+    const selection = tableState(table.table);
+    const selected = selectedCount(table);
+    const row = document.createElement('div');
+    row.className = 'table-row' + (selected === 0 ? ' off' : '') + (table.open ? ' open' : '');
+
+    const countText = selection.mode === 'rows'
+        ? t('rows_selected', '%s de %s filas').replace('%s', selected).replace('%s', table.count)
+        : `${table.count} ${table.count === 1 ? t('row', '') : t('rows', '')}`;
+    const countClass = selected === 0 ? '' : (table.mode === 'update' ? ' soft' : ' has');
+
+    const notes = [table.table];
+    if (table.discovered && (table.links || []).length) notes.push(table.links.join(' / '));
+    if (table.locked) notes.push(t('locked', ''));
+    if (table.discovered) notes.push(t('detected', ''));
+    if (table.mode === 'update') notes.push(t('soft_delete', ''));
+    if (!table.key && !table.locked) notes.push(t('no_key', ''));
+
+    row.innerHTML = `
+        <div class="table-main">
+            <div class="check${selection.mode === 'all' ? ' on' : ''}${selection.mode === 'rows' ? ' partial' : ''}${table.locked ? ' locked' : ''}">${selection.mode === 'rows' ? '–' : '✓'}</div>
+            <div class="table-name">
+                <div class="table-label">${escapeHtml(table.label)}</div>
+                <div class="table-sub">${escapeHtml(notes.join(' · '))}</div>
+            </div>
+            <span class="count${countClass}">${escapeHtml(countText)}</span>
+            <span class="caret">${table.count ? '›' : ''}</span>
+        </div>
+        <div class="rows">${rowsHtml(table)}</div>`;
+
+    row.querySelector('.check').addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (table.locked) return;
+        selection.mode = selection.mode === 'all' ? 'none' : 'all';
+        selection.ids.clear();
+        replaceTable(row, table);
+    });
+
+    if (table.count) {
+        row.querySelector('.table-main').addEventListener('click', () => {
+            table.open = !table.open;
+            row.classList.toggle('open', table.open);
+        });
+    }
+
+    for (const box of row.querySelectorAll('.row-check[data-id]')) {
+        box.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleRow(table, box.dataset.id);
+            replaceTable(row, table);
+        });
+    }
+
+    const loader = row.querySelector('.load-rows');
+    if (loader) {
+        loader.addEventListener('click', (event) => {
+            event.stopPropagation();
+            loader.textContent = t('loading_rows', '');
+            post('rows', { table: table.table, charId: state.preview.charId });
+        });
+    }
+
+    return row;
+}
+
+// Repinta solo la tabla tocada: con cientos de filas abiertas repintarlo todo se nota.
+function replaceTable(node, table) {
+    const fresh = renderTable(table);
+    node.replaceWith(fresh);
+    updateTotal();
+}
+
+function toggleRow(table, id) {
+    const selection = tableState(table.table);
+
+    if (selection.mode === 'all') {
+        // Al desmarcar una fila de una tabla entera, se pasa a "solo estas filas":
+        // las que no estén cargadas dejan de estar seleccionadas, y el contador lo enseña.
+        selection.mode = 'rows';
+        selection.ids = new Set(table.rows.map((row) => row.id).filter(Boolean));
+    }
+
+    if (selection.ids.has(id)) {
+        selection.ids.delete(id);
+    } else {
+        selection.ids.add(id);
+        selection.mode = 'rows';
+    }
+
+    if (selection.ids.size === 0) selection.mode = 'none';
+    if (selection.mode === 'rows' && selection.ids.size === table.count) selection.mode = 'all';
 }
 
 function rowsHtml(table) {
@@ -242,24 +317,38 @@ function rowsHtml(table) {
         return `<div class="rows-empty">${escapeHtml(t('empty_table', ''))}</div>`;
     }
 
-    const head = table.columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('');
-    const body = table.rows
-        .map((cells) => `<tr>${cells.map((cell) => `<td title="${escapeHtml(cell)}">${escapeHtml(cell)}</td>`).join('')}</tr>`)
-        .join('');
+    const selection = tableState(table.table);
+    const selectable = !!table.key && !table.locked;
+
+    const head = `<tr><th class="pick"></th>${table.columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('')}</tr>`;
+
+    const body = table.rows.map((row) => {
+        const checked = selection.mode === 'all' || (selection.mode === 'rows' && selection.ids.has(row.id));
+        const box = selectable && row.id
+            ? `<div class="row-check${checked ? ' on' : ''}" data-id="${escapeHtml(row.id)}">✓</div>`
+            : `<div class="row-check disabled">${checked ? '✓' : ''}</div>`;
+        const cells = row.cells.map((cell) => `<td title="${escapeHtml(cell)}">${escapeHtml(cell)}</td>`).join('');
+        return `<tr class="${checked ? '' : 'unchecked'}"><td class="pick">${box}</td>${cells}</tr>`;
+    }).join('');
 
     const hidden = table.count - table.rows.length;
-    const more = hidden > 0
-        ? `<div class="rows-more">${escapeHtml((t('more_rows', 'y %s filas más')).replace('%s', hidden))}</div>`
+    const footer = hidden > 0
+        ? `<div class="rows-more">
+               ${escapeHtml(t('showing', 'mostrando %s de %s').replace('%s', table.rows.length).replace('%s', table.count))}
+               <button class="ghost-btn sm load-rows">${escapeHtml(t('load_rows', ''))}</button>
+           </div>`
         : '';
 
-    return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>${more}`;
+    return `<table><thead>${head}</thead><tbody>${body}</tbody></table>${footer}`;
 }
 
 function updateTotal() {
-    const total = state.preview.tables
-        .filter((table) => state.selection.has(table.table))
-        .reduce((sum, table) => sum + table.count, 0);
+    const total = state.preview.tables.reduce((sum, table) => sum + selectedCount(table), 0);
     $('total').textContent = total;
+}
+
+function anySelected() {
+    return state.preview.tables.some((table) => selectedCount(table) > 0);
 }
 
 /* ── Ejecutar ───────────────────────────────────────────────────────── */
@@ -291,7 +380,7 @@ function tickHold() {
 function startHold() {
     if (state.running || !state.preview) return;
 
-    if (!state.selection.size) {
+    if (!anySelected()) {
         return toast(t('nothing_selected', ''), false);
     }
     if (state.requireReason && !$('reason').value.trim()) {
@@ -308,10 +397,20 @@ function execute() {
     $('kill').disabled = true;
     $('kill-label').textContent = t('killing', '');
 
+    const tables = [];
+    for (const table of state.preview.tables) {
+        const selection = tableState(table.table);
+        if (selection.mode === 'all') {
+            tables.push({ table: table.table });
+        } else if (selection.mode === 'rows' && selection.ids.size) {
+            tables.push({ table: table.table, ids: Array.from(selection.ids) });
+        }
+    }
+
     post('execute', {
         charId: state.preview.charId,
         reason: $('reason').value.trim(),
-        tables: Array.from(state.selection),
+        tables,
     });
 }
 
@@ -377,12 +476,16 @@ for (const tab of document.querySelectorAll('.tab')) {
 }
 
 $('select-all').addEventListener('click', () => {
-    for (const table of state.preview.tables) state.selection.add(table.table);
+    for (const table of state.preview.tables) {
+        state.selection.set(table.table, { mode: 'all', ids: new Set() });
+    }
     renderTables();
 });
 
 $('select-none').addEventListener('click', () => {
-    state.selection = new Set(state.preview.tables.filter((table) => table.locked).map((table) => table.table));
+    for (const table of state.preview.tables) {
+        state.selection.set(table.table, { mode: table.locked ? 'all' : 'none', ids: new Set() });
+    }
     renderTables();
 });
 
@@ -465,6 +568,17 @@ window.addEventListener('message', (event) => {
         }
         state.preview = data;
         renderPreview();
+        return;
+    }
+
+    if (action === 'rows') {
+        const table = (state.preview && state.preview.tables || []).find((entry) => entry.table === data.table);
+        if (!table) return;
+        table.columns = data.columns || table.columns;
+        table.rows = data.rows || [];
+        table.key = data.key || table.key;
+        table.open = true;
+        renderTables();
         return;
     }
 

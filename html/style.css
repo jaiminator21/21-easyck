@@ -458,6 +458,29 @@ body {
 .check.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .check.locked { background: var(--bg-hover); border-color: #39404f; color: var(--dim); }
 
+/* Selección parcial: la tabla no va entera, solo las filas marcadas */
+.check.partial { background: var(--warn); border-color: var(--warn); color: #14171c; font-weight: 700; }
+
+/* Casilla de cada fila */
+.row-check {
+    width: 16px;
+    height: 16px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--bg-deep);
+    font-size: 10px;
+    line-height: 1;
+    color: transparent;
+    cursor: pointer;
+    transition: background .12s ease, border-color .12s ease, color .12s ease;
+}
+
+.row-check:hover { border-color: #39404f; }
+.row-check.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.row-check.disabled { cursor: not-allowed; opacity: .4; color: var(--dim); }
+
 .table-name { flex: 1; min-width: 0; }
 
 .table-label { font-size: 14px; font-weight: 600; letter-spacing: .02em; }
@@ -521,8 +544,15 @@ td {
     border-bottom: 1px solid var(--line-soft);
 }
 
+th.pick, td.pick { width: 26px; padding-right: 10px; }
+
+/* Fila desmarcada: se ve que se queda */
+tr.unchecked td { opacity: .35; }
+
 .rows-more,
 .rows-empty { padding-top: 8px; font-size: 11px; color: var(--faint); }
+
+.rows-more { display: flex; align-items: center; gap: 10px; }
 
 /* ── Pie ─────────────────────────────────────────────────────────────── */
 

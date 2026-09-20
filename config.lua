@@ -34,10 +34,56 @@ Config.Permissions = {
     Groups = { 'admin', 'superadmin', 'god' },
 }
 
+-- Autodetección: easy-ck recorre TODA la base de datos y se queda con cualquier
+-- tabla que tenga una columna con el ID del personaje (en Qbox/QB el `citizenid`).
+-- Ese ID es el identificador principal: lo que se busca en la base de datos es su
+-- valor, así que una columna que no contenga ese ID sale con 0 filas y no se muestra.
+-- Así aparecen también las tablas de scripts que no has puesto a mano: teléfono,
+-- redes sociales, casas, tatuajes, trabajos, facturas...
+Config.Discovery = {
+    Enabled = true,
+
+    -- Cualquier columna cuyo nombre CONTENGA uno de estos textos se considera un
+    -- vínculo con el personaje. Cubre nombres como `citizenid`, `owner_citizenid`,
+    -- `sender_citizenid`, `target_cid`, `player_charid`...
+    -- Al nombre de la columna principal del framework se le añade solo.
+    Patterns = {
+        'citizenid', 'citizen_id', 'charid', 'char_id', 'identifier',
+        'stateid', 'state_id', 'cid',
+    },
+
+    -- Nombres exactos de columnas que no llevan ninguno de esos textos.
+    -- Que sobren no molesta: si no contienen el ID del personaje, salen a 0 filas
+    -- y no se enseñan.
+    Columns = { 'owner', 'holder', 'player', 'character', 'character_id', 'user' },
+
+    -- Si una tabla tiene varias columnas válidas (por ejemplo emisor y receptor en
+    -- los mensajes del teléfono), se cuentan y se borran las filas de todas ellas.
+
+    -- Tablas que nunca se tocan aunque tengan una de esas columnas.
+    -- Los baneos y los avisos del staff van aquí a propósito: si se borraran con el CK,
+    -- cualquiera se quitaría un baneo haciéndose un personaje nuevo. Quita de la lista
+    -- lo que quieras que sí se borre.
+    Ignore = {
+        'easy_ck_log',
+        'bans', 'ban', 'banlist', 'ban_list', 'easyadmin_bans', 'txadmin_bans',
+        'warnings', 'warns', 'player_warns', 'playerwarnings', 'admin_logs', 'logs',
+    },
+
+    -- Las tablas detectadas salen marcadas para borrar. Ponlo en false si prefieres
+    -- revisarlas una a una antes de cada CK.
+    DefaultSelected = true,
+}
+
 -- Vista previa de la interfaz: qué se le muestra al staff antes de confirmar el CK.
 Config.Preview = {
-    -- Filas de detalle que se envían por tabla (el recuento siempre es el total real)
+    -- Filas de detalle que se envían por tabla al abrir la ficha
+    -- (el recuento siempre es el total real)
     MaxRows = 25,
+
+    -- Filas que se envían al pulsar "cargar todas las filas" de una tabla,
+    -- que es cuando se pueden marcar y desmarcar una a una
+    MaxRowsExpanded = 500,
 
     -- Etiqueta, columnas y estado por defecto de cada tabla. Las tablas que no estén aquí
     -- salen igualmente con su nombre y su número de filas.
