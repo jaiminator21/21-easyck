@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>easy-ck · demo</title>
+<link rel="stylesheet" href="../html/style.css">
+</head>
+<body>
+<!-- Demo de la interfaz para ajustar el diseño sin levantar el servidor.
+     Carga el html/style.css y el html/app.js de verdad y les envía datos de ejemplo.
+
+     El navegador no deja leer archivos con file://, así que se sirve la carpeta:
+       python3 -m http.server 8000
+     y se abre http://localhost:8000/tools/demo.html -->
+<div id="host"></div>
+
+<script>
+// Carga el cuerpo real de html/index.html dentro de esta página.
+fetch('../html/index.html')
+    .then((response) => response.text())
+    .then((html) => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        document.getElementById('host').innerHTML = doc.getElementById('app').outerHTML;
+        document.getElementById('app').classList.add('hidden');
+
+        const script = document.createElement('script');
+        script.src = '../html/app.js';
+        script.onload = start;
+        document.body.appendChild(script);
+    });
+
+const LOCALE = {
+    title: 'Character Kill', subtitle: 'Muerte permanente de personaje',
+    tab_online: 'En línea', tab_all: 'Todos', search: 'Buscar por nombre, ID o citizenid...',
+    search_all: 'Buscar por nombre o citizenid...', load_more: 'Cargar más',
+    no_players: 'No hay jugadores conectados', no_results: 'Ningún personaje coincide con la búsqueda',
+    no_char: 'Sin personaje', empty_title: 'Selecciona un jugador',
+    empty_text: 'Elige a alguien de la lista o busca un personaje desconectado para ver todo lo que se va a borrar.',
+    loading: 'Cargando...', data: 'Datos que se van a borrar', select_all: 'Marcar todo',
+    select_none: 'Desmarcar todo', locked: 'Siempre se borra', rows: 'filas', row: 'fila',
+    empty_table: 'Sin datos', more_rows: 'y %s filas más', soft_delete: 'Se marcará como borrado',
+    total: 'Total seleccionado', reason: 'Motivo del CK', reason_ph: 'Ej: muerte en rol durante un atraco',
+    reason_req: 'Obligatorio', kill: 'Mantén pulsado para hacer CK', killing: 'Ejecutando CK...',
+    close: 'Cerrar', status_online: 'En línea', status_offline: 'Desconectado',
+    nothing_selected: 'No has seleccionado ninguna tabla.',
+    irreversible: 'Esta acción borra los datos de la base de datos. Solo se puede revertir a mano desde easy_ck_log.',
+    f_name: 'Nombre', f_birth: 'Nacimiento', f_phone: 'Teléfono', f_job: 'Trabajo',
+    f_gang: 'Banda', f_cash: 'Efectivo', f_bank: 'Banco', f_crypto: 'Cripto', f_last_seen: 'Último acceso',
+};
+
+function table(name, label, count, columns, rows, extra) {
+    return Object.assign({ table: name, label, count, columns, rows, mode: 'delete', locked: false, selected: true }, extra || {});
+}
+
+function start() {
+    window.postMessage({ action: 'open', data: {
+        locale: LOCALE, framework: 'qbox', requireReason: false,
+        players: [
+            { id: 1, steam: 'jaiminator21', charId: 'ABC12345', name: 'Juan Pérez', job: 'Policía' },
+            { id: 5, steam: 'Piquito2310', charId: 'XYZ98765', name: 'Marta Ruiz', job: 'Mecánico' },
+            { id: 9, steam: 'goan311', charId: null, name: null, job: null },
+        ],
+    } }, '*');
+
+    setTimeout(() => window.postMessage({ action: 'preview', data: {
+        charId: 'ABC12345', name: 'Juan Pérez', online: 1, framework: 'qbox',
+        summary: [
+            { key: 'f_name', value: 'Juan Pérez' }, { key: 'f_birth', value: '1994-03-11' },
+            { key: 'f_phone', value: '555-0193' }, { key: 'f_job', value: 'Policía - Cadete' },
+            { key: 'f_cash', value: '$4.210' }, { key: 'f_bank', value: '$128.940' },
+            { key: 'f_crypto', value: '3' }, { key: 'f_last_seen', value: '2026-09-19 22:41:02' },
+        ],
+        tables: [
+            table('players', 'Personaje', 1, ['citizenid', 'name', 'money'],
+                [['ABC12345', 'jaiminator21', '{"cash":4210,"bank":128940}']], { locked: true }),
+            table('player_groups', 'Trabajos y bandas', 3, ['group', 'type', 'grade'],
+                [['police', 'job', '0'], ['vagos', 'gang', '2'], ['unemployed', 'job', '0']]),
+            table('player_vehicles', 'Vehículos', 6, ['plate', 'vehicle', 'garage', 'state'],
+                [['ABC 123', 'sultan', 'legionsquare', '1'], ['DEF 456', 'kuruma', 'pillboxgarage', '0'],
+                 ['GHI 789', 'dominator', 'legionsquare', '1'], ['JKL 012', 'blista', 'impound', '2'],
+                 ['MNO 345', 'faggio', 'legionsquare', '1']]),
+            table('playerskins', 'Apariencia', 1, ['model'], [['mp_m_freemode_01']]),
+            table('player_outfits', 'Outfits', 4, ['outfitname', 'model'],
+                [['Uniforme', 'mp_m_freemode_01'], ['Playa', 'mp_m_freemode_01'],
+                 ['Traje', 'mp_m_freemode_01'], ['Gimnasio', 'mp_m_freemode_01']]),
+            table('properties', 'Propiedades', 2, ['id', 'name'], [['12', 'Mirror Park 4'], ['31', 'Trastero']]),
+            table('phone_messages', 'Mensajes', 184, ['number'], [['555-0101'], ['555-0102'], ['555-0103']], { selected: false }),
+            table('player_contacts', 'Contactos', 42, ['name', 'number'],
+                [['Marta', '555-0102'], ['Taller', '555-0177']], { selected: false }),
+            table('phone_invoices', 'Facturas', 9, ['amount', 'society'], [['1200', 'mechanic']]),
+            table('crypto_transactions', 'Cripto', 5, ['title', 'message'], [['Compra', '+2 QBit']]),
+        ],
+    } }, '*'), 60);
+}
+</script>
+</body>
+</html>
