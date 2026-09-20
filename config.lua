@@ -34,7 +34,7 @@ Config.Permissions = {
     Groups = { 'admin', 'superadmin', 'god' },
 }
 
--- Autodetección: easy-ck recorre TODA la base de datos y se queda con cualquier
+-- Autodetección: 21-easyck recorre TODA la base de datos y se queda con cualquier
 -- tabla que tenga una columna con el ID del personaje (en Qbox/QB el `citizenid`).
 -- Ese ID es el identificador principal: lo que se busca en la base de datos es su
 -- valor, así que una columna que no contenga ese ID sale con 0 filas y no se muestra.

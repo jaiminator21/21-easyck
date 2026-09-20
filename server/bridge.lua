@@ -254,13 +254,13 @@ function LoadBridge()
     if framework == 'auto' then
         framework = detect()
         if not framework then
-            error('[easy-ck] No se ha detectado ningún framework. Define Config.Framework (usa "custom" si tienes uno propio).')
+            error('[21-easyck] No se ha detectado ningún framework. Define Config.Framework (usa "custom" si tienes uno propio).')
         end
     end
 
     local factory = Adapters[framework]
     if not factory then
-        error(('[easy-ck] Framework no soportado: %s'):format(tostring(framework)))
+        error(('[21-easyck] Framework no soportado: %s'):format(tostring(framework)))
     end
 
     local bridge = factory()
@@ -271,7 +271,7 @@ function LoadBridge()
         if t.main then bridge.mainTable = t end
     end
     if not bridge.mainTable then
-        error(('[easy-ck] Config.Tables.%s necesita una tabla con main = true'):format(framework))
+        error(('[21-easyck] Config.Tables.%s necesita una tabla con main = true'):format(framework))
     end
 
     return bridge

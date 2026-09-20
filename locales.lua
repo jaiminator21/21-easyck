@@ -25,7 +25,7 @@ Locales = {
         cancel_help     = 'Cancela el CK pendiente',
         menu_help       = 'Abre la interfaz de CK',
         keybind_label   = 'Abrir interfaz de CK',
-        ui_not_ready    = 'easy-ck todavía no está listo.',
+        ui_not_ready    = '21-easyck todavía no está listo.',
         kept_tables     = 'Tablas conservadas: %s',
         -- Interfaz
         ui = {
@@ -117,7 +117,7 @@ Locales = {
         cancel_help     = 'Cancel the pending CK',
         menu_help       = 'Open the CK interface',
         keybind_label   = 'Open CK interface',
-        ui_not_ready    = 'easy-ck is not ready yet.',
+        ui_not_ready    = '21-easyck is not ready yet.',
         kept_tables     = 'Kept tables: %s',
         -- UI
         ui = {

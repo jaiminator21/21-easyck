@@ -1,4 +1,4 @@
-# easy-ck
+# 21-easyck
 
 Script **standalone** de FiveM para hacer **CK (Character Kill / muerte permanente)** con un solo comando. Funciona con **ESX, QBCore, Qbox y ox_core**, y con cualquier otro framework mediante el modo `custom`.
 
@@ -24,12 +24,12 @@ Script **standalone** de FiveM para hacer **CK (Character Kill / muerte permanen
 
 ## Instalación
 
-1. Copia la carpeta en `resources/` y llámala `easy-ck`.
+1. Copia la carpeta en `resources/` y llámala `21-easyck`.
 2. En `server.cfg`, arranca el script **después** de oxmysql y de tu framework:
    ```cfg
    ensure oxmysql
    ensure es_extended   # o qb-core / qbx_core / ox_core
-   ensure easy-ck
+   ensure 21-easyck
 
    add_ace group.admin easyck.use allow
    ```
@@ -76,7 +76,7 @@ También funciona desde la consola del servidor (`characterkill 12`, `ckconfirm`
 
 ### Qué tablas salen
 
-No hace falta que mantengas una lista. Al arrancar, easy-ck pregunta a la base de datos qué
+No hace falta que mantengas una lista. Al arrancar, 21-easyck pregunta a la base de datos qué
 tablas tienen alguna columna que pueda contener el ID del personaje y, en cada CK, cuenta
 cuántas filas de ese personaje hay en cada una. Las que tienen filas salen en la interfaz
 marcadas como `detectada`; las que no, no se enseñan.
@@ -130,10 +130,10 @@ Para otro framework, pon `Config.Framework = 'custom'` y rellena `Config.Tables.
 
 ```lua
 -- Servidor: CK sin confirmación
-local ok, result = exports['easy-ck']:CharacterKill('ABC12345', 'Motivo')
+local ok, result = exports['21-easyck']:CharacterKill('ABC12345', 'Motivo')
 
 -- Se lanza después de cada CK
-AddEventHandler('easy-ck:characterKilled', function(data)
+AddEventHandler('21-easyck:characterKilled', function(data)
     -- data.charId, data.name, data.reason, data.framework, data.staff
 end)
 ```
@@ -160,3 +160,36 @@ python3 -m http.server 8000
 ```
 
 > ⚠️ Prueba el script primero en una base de datos de desarrollo y revisa que la lista de tablas coincida con tu servidor. El borrado es real.
+
+## Candado de identidad
+
+[server/guard.lua](server/guard.lua) comprueba al arrancar que no se le haya cambiado la
+identidad al script. Si algo no cuadra, imprime el motivo en la consola y **detiene el recurso**:
+
+- La carpeta tiene que llamarse `21-easyck`.
+- `fxmanifest.lua` tiene que conservar su `name` y su `author`.
+- Los eventos (`21-easyck:ui:*`, `21-easyck:characterKilled`) y el export `CharacterKill` tienen
+  que llamarse como se llaman.
+- El archivo `LICENSE` tiene que seguir ahí, con su línea de copyright.
+
+Modificar el resto del script no lo activa: puedes tocar la configuración, las tablas, la
+interfaz o la lógica sin problema. Lo que corta es renombrarlo para publicarlo como otra cosa.
+
+No es una protección: el código va en Lua en claro y el candado se puede quitar. Lo que hace es
+obligar a quitarlo a propósito, de forma que nadie pueda alegar que republicó el script con otro
+nombre sin darse cuenta.
+
+Si alguna vez quieres cambiarle el nombre de verdad, hay que tocar `EXPECTED_NAME` y la lista
+`MARKERS` de [server/guard.lua](server/guard.lua), el `fxmanifest.lua`, el nombre de los eventos
+en cliente y servidor, y la comprobación del principio de [client/main.lua](client/main.lua).
+
+## Licencia
+
+Puedes usarlo y modificarlo libremente en tu servidor, y compartirlo **gratis** manteniendo la
+autoría. **No se puede vender ni revender**, ni suelto ni dentro de un pack, una plantilla de
+servidor o cualquier producto de pago, ni distribuirlo por Tebex o sistemas de escrow.
+
+Los detalles están en [LICENSE](LICENSE). Si quieres hacer algo que no encaje ahí, pídelo.
+
+El script comprueba al arrancar que no se le haya cambiado el nombre ni quitado los créditos
+(ver arriba).

@@ -11,7 +11,7 @@ local busy = {}        -- [charId] = true mientras se ejecuta un CK
 
 local function notify(src, msg, kind)
     if src == 0 then
-        print(('[easy-ck] %s'):format(msg))
+        print(('[21-easyck] %s'):format(msg))
     elseif Config.Notify then
         Config.Notify(src, msg, kind or 'inform')
     else
@@ -24,6 +24,7 @@ local function notify(src, msg, kind)
 end
 
 local function hasPermission(src)
+    if GuardOk ~= true then return false end
     if src == 0 then return true end
     if not Bridge then return false end
     if IsPlayerAceAllowed(src, Config.Permissions.Ace) then return true end
@@ -200,7 +201,7 @@ local function discoverTables()
     ]]):format(table.concat(conditions, ' OR ')), params)
 
     if not ok then
-        print(('[easy-ck] ^3No se ha podido escanear la base de datos: %s^0'):format(tostring(rows)))
+        print(('[21-easyck] ^3No se ha podido escanear la base de datos: %s^0'):format(tostring(rows)))
         return discoveryCache
     end
 
@@ -228,7 +229,7 @@ local function discoverTables()
         for _, entry in ipairs(discoveryCache) do
             names[#names + 1] = ('%s(%s)'):format(entry.table, table.concat(entry.columns, ','))
         end
-        print(('[easy-ck] escaneo: %s tablas con vínculo al personaje además de las configuradas: %s')
+        print(('[21-easyck] escaneo: %s tablas con vínculo al personaje además de las configuradas: %s')
             :format(#discoveryCache, table.concat(names, ' ')))
     end
 
@@ -347,7 +348,7 @@ local function fetchRows(entry, charId, limit)
             table.concat(selects, ', '), ident(entry.table), whereFor(entry), limit),
         paramsFor(entry, charId))
     if not ok then
-        print(('[easy-ck] ^3No se han podido leer las filas de %s: %s^0'):format(entry.table, tostring(rows)))
+        print(('[21-easyck] ^3No se han podido leer las filas de %s: %s^0'):format(entry.table, tostring(rows)))
         return columns, {}, key
     end
 
@@ -522,7 +523,7 @@ local function executeCK(data, staffSrc)
                 if okSelect and rows and #rows > 0 then
                     backup[job.entry.table] = rows
                 elseif not okSelect then
-                    print(('[easy-ck] ^3No se pudo copiar %s: %s^0'):format(job.entry.table, tostring(rows)))
+                    print(('[21-easyck] ^3No se pudo copiar %s: %s^0'):format(job.entry.table, tostring(rows)))
                 end
             end
         end
@@ -544,7 +545,7 @@ local function executeCK(data, staffSrc)
                 affected = affected + (tonumber(count) or 0)
                 if t == Bridge.mainTable then mainAffected = tonumber(count) or 0 end
             else
-                print(('[easy-ck] ^3Error en %s: %s^0'):format(t.table, tostring(count)))
+                print(('[21-easyck] ^3Error en %s: %s^0'):format(t.table, tostring(count)))
             end
         end
 
@@ -564,7 +565,7 @@ local function executeCK(data, staffSrc)
         )
         sendWebhook(data, staffName, staffLicense, affected, keptList)
 
-        TriggerEvent('easy-ck:characterKilled', {
+        TriggerEvent('21-easyck:characterKilled', {
             charId = data.charId,
             name = data.name,
             reason = data.reason,
@@ -643,7 +644,7 @@ end
 
 RegisterCommand(Config.Command, function(src, args)
     if not Bridge then
-        return notify(src, 'easy-ck todavía no está listo.', 'error')
+        return notify(src, '21-easyck todavía no está listo.', 'error')
     end
     if not hasPermission(src) then
         return notify(src, L('no_permission'), 'error')
@@ -766,7 +767,7 @@ local function listCharacters(search, offset, limit)
 
     local ok, rows = pcall(MySQL.query.await, query, params)
     if not ok then
-        print(('[easy-ck] ^3Error listando personajes: %s^0'):format(tostring(rows)))
+        print(('[21-easyck] ^3Error listando personajes: %s^0'):format(tostring(rows)))
         return {}, false
     end
 
@@ -896,14 +897,14 @@ local function sanitizeSelection(list)
     return selection
 end
 
-RegisterNetEvent('easy-ck:ui:request', function()
+RegisterNetEvent('21-easyck:ui:request', function()
     local src = source
     if Config.Debug then
-        print(('[easy-ck] %s (%s) pide la interfaz: bridge=%s permiso=%s'):format(
+        print(('[21-easyck] %s (%s) pide la interfaz: bridge=%s permiso=%s'):format(
             GetPlayerName(src) or '?', src, tostring(Bridge ~= nil), tostring(hasPermission(src))))
     end
     if not uiAllowed(src, 'open') then return end
-    TriggerClientEvent('easy-ck:ui:open', src, {
+    TriggerClientEvent('21-easyck:ui:open', src, {
         locale = LUI(),
         framework = Bridge.name,
         requireReason = Config.RequireReason and true or false,
@@ -911,18 +912,18 @@ RegisterNetEvent('easy-ck:ui:request', function()
     })
 end)
 
-RegisterNetEvent('easy-ck:ui:players', function()
+RegisterNetEvent('21-easyck:ui:players', function()
     local src = source
     if not uiAllowed(src, 'players') then return end
-    TriggerClientEvent('easy-ck:ui:players', src, onlinePlayers())
+    TriggerClientEvent('21-easyck:ui:players', src, onlinePlayers())
 end)
 
-RegisterNetEvent('easy-ck:ui:list', function(search, offset)
+RegisterNetEvent('21-easyck:ui:list', function(search, offset)
     local src = source
     if not uiAllowed(src, 'list') then return end
     CreateThread(function()
         local list, more = listCharacters(search, offset, 30)
-        TriggerClientEvent('easy-ck:ui:list', src, {
+        TriggerClientEvent('21-easyck:ui:list', src, {
             characters = list,
             offset = math.max(tonumber(offset) or 0, 0),
             more = more,
@@ -931,7 +932,7 @@ RegisterNetEvent('easy-ck:ui:list', function(search, offset)
     end)
 end)
 
-RegisterNetEvent('easy-ck:ui:preview', function(target)
+RegisterNetEvent('21-easyck:ui:preview', function(target)
     local src = source
     if not uiAllowed(src, 'preview') then return end
     if type(target) ~= 'string' or target == '' or #target > 80 then return end
@@ -939,16 +940,16 @@ RegisterNetEvent('easy-ck:ui:preview', function(target)
     CreateThread(function()
         local charId, err = resolveTarget(target)
         if not charId then
-            return TriggerClientEvent('easy-ck:ui:preview', src, { error = err })
+            return TriggerClientEvent('21-easyck:ui:preview', src, { error = err })
         end
 
         local okPreview, preview, previewErr = pcall(buildPreview, charId)
         if not okPreview then
-            print(('[easy-ck] ^1Error al preparar la vista previa: %s^0'):format(tostring(preview)))
-            return TriggerClientEvent('easy-ck:ui:preview', src, { error = L('failed', tostring(preview)) })
+            print(('[21-easyck] ^1Error al preparar la vista previa: %s^0'):format(tostring(preview)))
+            return TriggerClientEvent('21-easyck:ui:preview', src, { error = L('failed', tostring(preview)) })
         end
         if not preview then
-            return TriggerClientEvent('easy-ck:ui:preview', src, { error = previewErr })
+            return TriggerClientEvent('21-easyck:ui:preview', src, { error = previewErr })
         end
 
         -- Testigo de confirmación: solo se puede ejecutar el CK del personaje que se acaba de ver.
@@ -957,12 +958,12 @@ RegisterNetEvent('easy-ck:ui:preview', function(target)
             name = preview.name,
             expires = os.time() + 600,
         }
-        TriggerClientEvent('easy-ck:ui:preview', src, preview)
+        TriggerClientEvent('21-easyck:ui:preview', src, preview)
     end)
 end)
 
 -- "Cargar todas las filas" de una tabla concreta, para poder marcarlas una a una.
-RegisterNetEvent('easy-ck:ui:rows', function(tableName, charId)
+RegisterNetEvent('21-easyck:ui:rows', function(tableName, charId)
     local src = source
     if not uiAllowed(src, 'rows') then return end
     if type(tableName) ~= 'string' or tableName == '' or #tableName > 80 then return end
@@ -982,7 +983,7 @@ RegisterNetEvent('easy-ck:ui:rows', function(tableName, charId)
 
         local limit = (Config.Preview and Config.Preview.MaxRowsExpanded) or 500
         local columns, rows, key = fetchRows(entry, pendingData.charId, limit)
-        TriggerClientEvent('easy-ck:ui:rows', src, {
+        TriggerClientEvent('21-easyck:ui:rows', src, {
             table = tableName,
             columns = columns,
             rows = rows,
@@ -991,7 +992,7 @@ RegisterNetEvent('easy-ck:ui:rows', function(tableName, charId)
     end)
 end)
 
-RegisterNetEvent('easy-ck:ui:execute', function(charId, reason, tables)
+RegisterNetEvent('21-easyck:ui:execute', function(charId, reason, tables)
     local src = source
     if not uiAllowed(src, 'execute') then return end
 
@@ -1000,7 +1001,7 @@ RegisterNetEvent('easy-ck:ui:execute', function(charId, reason, tables)
 
     local function fail(msg)
         notify(src, msg, 'error')
-        TriggerClientEvent('easy-ck:ui:result', src, { ok = false, message = msg })
+        TriggerClientEvent('21-easyck:ui:result', src, { ok = false, message = msg })
     end
 
     if not data or tostring(data.charId) ~= tostring(charId) then
@@ -1028,7 +1029,7 @@ RegisterNetEvent('easy-ck:ui:execute', function(charId, reason, tables)
 
         if ok then
             notify(src, L('done', data.name, tostring(data.charId), result), 'success')
-            TriggerClientEvent('easy-ck:ui:result', src, {
+            TriggerClientEvent('21-easyck:ui:result', src, {
                 ok = true,
                 message = L('done', data.name, tostring(data.charId), result),
             })
@@ -1040,7 +1041,7 @@ end)
 
 ---------------------------------------------------------------------------
 -- Export para otros recursos (sin confirmación):
---   local ok, result = exports['easy-ck']:CharacterKill('ABC12345', 'Motivo')
+--   local ok, result = exports['21-easyck']:CharacterKill('ABC12345', 'Motivo')
 ---------------------------------------------------------------------------
 
 exports('CharacterKill', function(input, reason)
@@ -1063,6 +1064,8 @@ end)
 ---------------------------------------------------------------------------
 
 MySQL.ready(function()
+    if GuardOk ~= true then return end -- ver server/guard.lua
+
     Bridge = LoadBridge()
 
     MySQL.query.await([[

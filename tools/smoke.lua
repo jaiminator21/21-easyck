@@ -1,4 +1,4 @@
--- Prueba de humo de easy-ck.
+-- Prueba de humo de 21-easyck.
 -- Simula el runtime de FiveM y oxmysql para recorrer el flujo entero sin
 -- levantar un servidor: apertura de la interfaz, listado de personajes,
 -- escaneo de la base de datos, vista previa, CK con selección de tablas y de
@@ -23,7 +23,7 @@ json = {
 }
 
 -- ── natives ────────────────────────────────────────────────────────────
-function GetCurrentResourceName() return 'easy-ck' end
+function GetCurrentResourceName() return '21-easyck' end
 function GetResourceState(name) return name == 'qbx_core' and 'started' or 'missing' end
 function GetPlayers() return { '1', '5' } end
 function GetPlayerName(src) return 'Jugador' .. tostring(src) end
@@ -41,6 +41,23 @@ function TriggerClientEvent(name, src, data) clientMsgs[#clientMsgs + 1] = { nam
 function RegisterCommand() end
 function AddEventHandler() end
 function RegisterNetEvent(name, fn) events[name] = fn end
+
+-- Para el candado de server/guard.lua: lee los archivos de verdad del recurso.
+local stopped
+function StopResource(name) stopped = name end
+
+function LoadResourceFile(_, file)
+    local handle = io.open(ROOT .. file, 'r')
+    if not handle then return nil end
+    local contents = handle:read('a')
+    handle:close()
+    return contents
+end
+
+function GetResourceMetadata(_, key)
+    local manifest = LoadResourceFile(nil, 'fxmanifest.lua') or ''
+    return manifest:match(key .. " '([^']+)'")
+end
 
 local qbxPlayer = { PlayerData = { citizenid = 'ABC12345', charinfo = { firstname = 'Juan', lastname = 'Pérez' }, job = { label = 'Policía' } } }
 -- En FiveM `exports` se puede llamar (exports('nombre', fn)) e indexar (exports.qbx_core)
@@ -160,6 +177,7 @@ MySQL = {
 -- ── carga del recurso ──────────────────────────────────────────────────
 dofile(ROOT .. 'config.lua')
 dofile(ROOT .. 'locales.lua')
+dofile(ROOT .. 'server/guard.lua')
 dofile(ROOT .. 'server/bridge.lua')
 dofile(ROOT .. 'server/main.lua')
 
@@ -184,24 +202,28 @@ local function touched(list)
     return out
 end
 
+print('\n== candado de identidad ==')
+check('el recurso se valida a sí mismo', GuardOk == true)
+check('no se ha detenido', stopped == nil, stopped)
+
 print('\n== apertura ==')
 source = 1
-events['easy-ck:ui:request']()
-local open = last('easy-ck:ui:open')
+events['21-easyck:ui:request']()
+local open = last('21-easyck:ui:open')
 check('framework detectado', open.framework == 'qbox', open.framework)
 check('textos de interfaz', open.locale.tab_all == 'Todos', open.locale.tab_all)
 check('jugadores en línea', #open.players == 2, #open.players)
 check('nombre del personaje', open.players[1].name == 'Juan Pérez', open.players[1].name)
 
 print('\n== pestaña todos ==')
-events['easy-ck:ui:list']('juan', 0)
-local list = last('easy-ck:ui:list')
+events['21-easyck:ui:list']('juan', 0)
+local list = last('21-easyck:ui:list')
 check('devuelve personajes', #list.characters == 2, #list.characters)
 check('marca quién está en línea', list.characters[1].online == 1, tostring(list.characters[1].online))
 
 print('\n== escaneo de la base de datos ==')
-events['easy-ck:ui:preview']('cid:ABC12345')
-local preview = last('easy-ck:ui:preview')
+events['21-easyck:ui:preview']('cid:ABC12345')
+local preview = last('21-easyck:ui:preview')
 check('sin error', preview.error == nil, preview.error)
 
 local byName = {}
@@ -234,18 +256,18 @@ check('columnas automáticas sin la de enlace', (function()
 end)())
 
 queries = {}
-events['easy-ck:ui:rows']('phone_messages', 'ABC12345')
-local rows = last('easy-ck:ui:rows')
+events['21-easyck:ui:rows']('phone_messages', 'ABC12345')
+local rows = last('21-easyck:ui:rows')
 check('carga todas las filas de una tabla', rows and #rows.rows == 184, rows and #rows.rows)
 
 print('\n== CK con selección de tablas y de filas ==')
 queries = {}
-events['easy-ck:ui:execute']('ABC12345', 'Motivo de prueba', {
+events['21-easyck:ui:execute']('ABC12345', 'Motivo de prueba', {
     { table = 'player_vehicles', ids = { '2', '5' } },   -- solo dos coches
     { table = 'twitter_accounts' },                      -- la cuenta entera
     { table = 'tabla_inventada' },                       -- no existe: se ignora
 })
-local result = last('easy-ck:ui:result')
+local result = last('21-easyck:ui:result')
 check('CK correcto', result.ok == true, result.message)
 
 local hit = touched(queries)
@@ -263,8 +285,8 @@ for _, q in ipairs(queries) do if q:find('^INSERT INTO easy_ck_log') then insert
 check('deja constancia de lo conservado y lo parcial', insert and insert:find('kept_tables') ~= nil)
 
 print('\n== la ejecución exige vista previa ==')
-events['easy-ck:ui:execute']('ABC12345', 'otra vez', { { table = 'player_vehicles' } })
-check('segunda ejecución rechazada', last('easy-ck:ui:result').ok == false, last('easy-ck:ui:result').message)
+events['21-easyck:ui:execute']('ABC12345', 'otra vez', { { table = 'player_vehicles' } })
+check('segunda ejecución rechazada', last('21-easyck:ui:result').ok == false, last('21-easyck:ui:result').message)
 
 print('\n== export sin interfaz (valores por defecto) ==')
 queries = {}
@@ -278,6 +300,15 @@ check('sin selección borra todo lo vinculado al personaje',
     and all.npwd_messages ~= nil)
 check('sin selección tampoco toca los baneos', all.bans == nil)
 check('sin selección borra también las tablas con guion', all['21-robberies_evidence'] ~= nil)
+
+-- Este va al final: deja GuardOk a false a propósito.
+print('\n== el candado salta si se renombra la carpeta ==')
+local realName = GetCurrentResourceName
+function GetCurrentResourceName() return 'freeck-vendido-en-tebex' end
+dofile(ROOT .. 'server/guard.lua')
+check('no se carga con otro nombre de carpeta', GuardOk == false)
+check('detiene el recurso', stopped == 'freeck-vendido-en-tebex', stopped)
+GetCurrentResourceName = realName
 
 if failures > 0 then
     print(('\n%d comprobaciones han fallado.\n'):format(failures))

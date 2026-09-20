@@ -3,7 +3,7 @@
    que se borra) lo resuelve el servidor.
 ------------------------------------------------------------------------- */
 
-const RESOURCE = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : 'easy-ck';
+const RESOURCE = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : '21-easyck';
 
 const HOLD_MS = 1800; // lo que hay que mantener pulsado para lanzar el CK
 

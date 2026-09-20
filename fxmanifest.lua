@@ -2,7 +2,7 @@ fx_version 'cerulean'
 game 'gta5'
 lua54 'yes'
 
-name 'easy-ck'
+name '21-easyck'
 description 'Character Kill standalone y multi-framework (ESX, QBCore, Qbox, ox_core)'
 author 'Jaime Sebastián'
 version '1.1.0'
@@ -14,6 +14,7 @@ shared_scripts {
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
+    'server/guard.lua',
     'server/bridge.lua',
     'server/main.lua',
 }

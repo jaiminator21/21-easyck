@@ -1,8 +1,15 @@
+-- Mismo candado que en server/guard.lua: si se ha renombrado la carpeta, el
+-- cliente no registra ni el comando ni la interfaz.
+if GetCurrentResourceName() ~= '21-easyck' then
+    print('^121-easyck: la carpeta del recurso se ha renombrado, el script no se carga.^0')
+    return
+end
+
 local uiOpen = false
 
 local function debug(msg)
     if Config.Debug then
-        print(('[easy-ck] %s'):format(msg))
+        print(('[21-easyck] %s'):format(msg))
     end
 end
 
@@ -21,7 +28,7 @@ end
 RegisterCommand(Config.MenuCommand, function()
     if uiOpen then return closeUi() end
     debug('/' .. Config.MenuCommand .. ' -> pidiendo la interfaz al servidor')
-    TriggerServerEvent('easy-ck:ui:request')
+    TriggerServerEvent('21-easyck:ui:request')
 end, false)
 
 if Config.MenuKeybind and Config.MenuKeybind ~= '' then
@@ -42,30 +49,30 @@ end)
 -- Respuestas del servidor -> interfaz
 ---------------------------------------------------------------------------
 
-RegisterNetEvent('easy-ck:ui:open', function(data)
+RegisterNetEvent('21-easyck:ui:open', function(data)
     debug(('el servidor ha respondido: %s jugadores'):format(#(data.players or {})))
     uiOpen = true
     SetNuiFocus(true, true)
     SendNUIMessage({ action = 'open', data = data })
 end)
 
-RegisterNetEvent('easy-ck:ui:players', function(players)
+RegisterNetEvent('21-easyck:ui:players', function(players)
     SendNUIMessage({ action = 'players', data = players })
 end)
 
-RegisterNetEvent('easy-ck:ui:list', function(data)
+RegisterNetEvent('21-easyck:ui:list', function(data)
     SendNUIMessage({ action = 'list', data = data })
 end)
 
-RegisterNetEvent('easy-ck:ui:preview', function(data)
+RegisterNetEvent('21-easyck:ui:preview', function(data)
     SendNUIMessage({ action = 'preview', data = data })
 end)
 
-RegisterNetEvent('easy-ck:ui:rows', function(data)
+RegisterNetEvent('21-easyck:ui:rows', function(data)
     SendNUIMessage({ action = 'rows', data = data })
 end)
 
-RegisterNetEvent('easy-ck:ui:result', function(data)
+RegisterNetEvent('21-easyck:ui:result', function(data)
     SendNUIMessage({ action = 'result', data = data })
 end)
 
@@ -79,27 +86,27 @@ RegisterNUICallback('close', function(_, cb)
 end)
 
 RegisterNUICallback('players', function(_, cb)
-    TriggerServerEvent('easy-ck:ui:players')
+    TriggerServerEvent('21-easyck:ui:players')
     cb(1)
 end)
 
 RegisterNUICallback('list', function(data, cb)
-    TriggerServerEvent('easy-ck:ui:list', data.search or '', data.offset or 0)
+    TriggerServerEvent('21-easyck:ui:list', data.search or '', data.offset or 0)
     cb(1)
 end)
 
 RegisterNUICallback('preview', function(data, cb)
-    TriggerServerEvent('easy-ck:ui:preview', tostring(data.target or ''))
+    TriggerServerEvent('21-easyck:ui:preview', tostring(data.target or ''))
     cb(1)
 end)
 
 RegisterNUICallback('rows', function(data, cb)
-    TriggerServerEvent('easy-ck:ui:rows', tostring(data.table or ''), tostring(data.charId or ''))
+    TriggerServerEvent('21-easyck:ui:rows', tostring(data.table or ''), tostring(data.charId or ''))
     cb(1)
 end)
 
 RegisterNUICallback('execute', function(data, cb)
-    TriggerServerEvent('easy-ck:ui:execute', tostring(data.charId or ''), data.reason or '', data.tables or {})
+    TriggerServerEvent('21-easyck:ui:execute', tostring(data.charId or ''), data.reason or '', data.tables or {})
     cb(1)
 end)
 
