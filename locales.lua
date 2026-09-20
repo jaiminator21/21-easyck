@@ -27,7 +27,7 @@ Locales = {
         keybind_label   = 'Abrir interfaz de CK',
         ui_not_ready    = '21-easyck todavía no está listo.',
         kept_tables     = 'Tablas conservadas: %s',
-        -- Interfaz
+        -- UI
         ui = {
             title         = 'Character Kill',
             subtitle      = 'Muerte permanente de personaje',
@@ -185,7 +185,7 @@ Locales = {
     },
 }
 
--- Tabla completa de textos de la interfaz, para enviarla al NUI
+-- Full set of UI strings, to be sent to the NUI
 function LUI()
     local locale = Locales[Config.Locale] or Locales.en
     local out = {}

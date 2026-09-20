@@ -1,15 +1,14 @@
--- Prueba de humo de 21-easyck.
--- Simula el runtime de FiveM y oxmysql para recorrer el flujo entero sin
--- levantar un servidor: apertura de la interfaz, listado de personajes,
--- escaneo de la base de datos, vista previa, CK con selección de tablas y de
--- filas sueltas, y el export.
+-- 21-easyck smoke test.
+-- Stubs the FiveM runtime and oxmysql to walk the whole flow without starting a
+-- server: opening the UI, listing characters, scanning the database, building the
+-- preview, running a CK with a partial table/row selection, and the export.
 --
 --   lua tools/smoke.lua
 
 local ROOT = (arg and arg[0] and arg[0]:match('^(.*)tools[/\\]smoke%.lua$')) or ''
 local queries, events, clientMsgs = {}, {}, {}
 
--- ── json mínimo ────────────────────────────────────────────────────────
+-- ── minimal json ───────────────────────────────────────────────────────
 json = {
     encode = function() return '{json}' end,
     decode = function(s)
@@ -42,7 +41,7 @@ function RegisterCommand() end
 function AddEventHandler() end
 function RegisterNetEvent(name, fn) events[name] = fn end
 
--- Para el candado de server/guard.lua: lee los archivos de verdad del recurso.
+-- For the lock in server/guard.lua: reads the resource's real files.
 local stopped
 function StopResource(name) stopped = name end
 
@@ -66,8 +65,8 @@ _G.exports = setmetatable({
 }, { __call = function(_, name, fn) _G.resourceExports[name] = fn end })
 _G.resourceExports = {}
 
--- ── base de datos simulada ─────────────────────────────────────────────
--- columnas: { nombre, tipo, es_clave_primaria }
+-- ── fake database ──────────────────────────────────────────────────────
+-- columns: { name, type, is_primary_key }
 local schema = {
     players         = { { 'citizenid', 'varchar', true }, { 'name', 'varchar' }, { 'charinfo', 'longtext' },
                         { 'money', 'longtext' }, { 'job', 'longtext' }, { 'gang', 'longtext' }, { 'last_updated', 'timestamp' } },
@@ -76,23 +75,23 @@ local schema = {
     player_outfits  = { { 'id', 'int', true }, { 'citizenid', 'varchar' }, { 'outfitname', 'varchar' }, { 'model', 'varchar' } },
     player_groups   = { { 'citizenid', 'varchar', true }, { 'group', 'varchar', true }, { 'type', 'varchar' }, { 'grade', 'int' } },
     properties      = { { 'id', 'int', true }, { 'owner', 'varchar' }, { 'name', 'varchar' } },
-    -- No están en Config.Tables: tienen que salir por el escaneo
+    -- Not in Config.Tables: they must show up through the scan
     phone_messages  = { { 'id', 'int', true }, { 'citizenid', 'varchar' }, { 'number', 'varchar' }, { 'message', 'text' } },
     npwd_messages   = { { 'id', 'int', true }, { 'sender_citizenid', 'varchar' }, { 'receiver_citizenid', 'varchar' }, { 'body', 'text' } },
     twitter_accounts= { { 'id', 'int', true }, { 'citizenid', 'varchar' }, { 'username', 'varchar' } },
     mdt_convictions = { { 'id', 'int', true }, { 'citizenid', 'varchar' }, { 'charge', 'varchar' } },
     bans            = { { 'id', 'int', true }, { 'citizenid', 'varchar' }, { 'reason', 'varchar' } },
-    -- Nombre con guion, como los recursos 21-*: hay que poder entrecomillarlo
+    -- Hyphenated name, like the 21-* resources: it must be quotable
     ['21-robberies_evidence'] = { { 'id', 'int', true }, { 'citizenid', 'varchar' }, { 'item', 'varchar' } },
     easy_ck_log     = { { 'id', 'int', true }, { 'char_id', 'varchar' }, { 'kept_tables', 'text' } },
 }
 
--- Filas que tiene el personaje en cada tabla. Lo que no esté aquí, 0.
+-- Rows the character has in each table. Anything not listed is 0.
 local counts = {
     players = 1, player_vehicles = 6, playerskins = 1, player_outfits = 4,
     player_groups = 3, properties = 2,
     phone_messages = 184, npwd_messages = 12, twitter_accounts = 2,
-    mdt_convictions = 0, -- detectada pero sin filas: no debe aparecer
+    mdt_convictions = 0, -- discovered but empty: must not show up
     ['21-robberies_evidence'] = 4,
 }
 
@@ -108,7 +107,7 @@ local function run(query, params)
         return schema[params[1]] and 1 or 0
     end
 
-    -- Escaneo: todas las columnas que casan con los patrones
+    -- Scan: every column matching the patterns
     if query:find('information_schema.columns col') then
         local rows = {}
         for name, columns in pairs(schema) do
@@ -132,7 +131,7 @@ local function run(query, params)
         return rows
     end
 
-    -- Recuento por lotes: se resuelve cada subconsulta por el nombre de su tabla
+    -- Batched counts: each subquery is resolved by its table name
     if query:find('^SELECT %(SELECT COUNT') then
         local row, index = {}, 0
         for name in query:gmatch('FROM `([^`]+)` WHERE') do
@@ -174,7 +173,7 @@ MySQL = {
     ready = function(fn) fn() end,
 }
 
--- ── carga del recurso ──────────────────────────────────────────────────
+-- ── load the resource ──────────────────────────────────────────────────
 dofile(ROOT .. 'config.lua')
 dofile(ROOT .. 'locales.lua')
 dofile(ROOT .. 'server/guard.lua')
@@ -202,53 +201,53 @@ local function touched(list)
     return out
 end
 
-print('\n== candado de identidad ==')
-check('el recurso se valida a sí mismo', GuardOk == true)
-check('no se ha detenido', stopped == nil, stopped)
+print('\n== identity lock ==')
+check('the resource validates itself', GuardOk == true)
+check('it was not stopped', stopped == nil, stopped)
 
-print('\n== apertura ==')
+print('\n== opening the UI ==')
 source = 1
 events['21-easyck:ui:request']()
 local open = last('21-easyck:ui:open')
-check('framework detectado', open.framework == 'qbox', open.framework)
-check('textos de interfaz', open.locale.tab_all == 'Todos', open.locale.tab_all)
-check('jugadores en línea', #open.players == 2, #open.players)
-check('nombre del personaje', open.players[1].name == 'Juan Pérez', open.players[1].name)
+check('framework detected', open.framework == 'qbox', open.framework)
+check('UI strings', open.locale.tab_all == 'Todos', open.locale.tab_all)
+check('online players', #open.players == 2, #open.players)
+check('character name', open.players[1].name == 'Juan Pérez', open.players[1].name)
 
-print('\n== pestaña todos ==')
+print('\n== all-characters tab ==')
 events['21-easyck:ui:list']('juan', 0)
 local list = last('21-easyck:ui:list')
-check('devuelve personajes', #list.characters == 2, #list.characters)
-check('marca quién está en línea', list.characters[1].online == 1, tostring(list.characters[1].online))
+check('returns characters', #list.characters == 2, #list.characters)
+check('flags who is online', list.characters[1].online == 1, tostring(list.characters[1].online))
 
-print('\n== escaneo de la base de datos ==')
+print('\n== database scan ==')
 events['21-easyck:ui:preview']('cid:ABC12345')
 local preview = last('21-easyck:ui:preview')
-check('sin error', preview.error == nil, preview.error)
+check('no error', preview.error == nil, preview.error)
 
 local byName = {}
 for _, tbl in ipairs(preview.tables) do byName[tbl.table] = tbl end
 
-check('salen las tablas configuradas', byName.players and byName.player_vehicles and byName.properties)
-check('sale una tabla que no está en la config', byName.phone_messages ~= nil)
-check('marcada como detectada', byName.phone_messages and byName.phone_messages.discovered == true)
-check('sale la de redes sociales', byName.twitter_accounts ~= nil)
-check('detecta las dos columnas de los mensajes',
+check('configured tables are listed', byName.players and byName.player_vehicles and byName.properties)
+check('a table missing from the config shows up', byName.phone_messages ~= nil)
+check('flagged as discovered', byName.phone_messages and byName.phone_messages.discovered == true)
+check('the social media table shows up', byName.twitter_accounts ~= nil)
+check('both message columns are detected',
     byName.npwd_messages and #byName.npwd_messages.links == 2,
     byName.npwd_messages and table.concat(byName.npwd_messages.links, ','))
-check('las detectadas sin filas no se enseñan', byName.mdt_convictions == nil)
-check('respeta la lista de ignoradas (baneos)', byName.bans == nil)
-check('admite nombres de tabla con guion', byName['21-robberies_evidence'] ~= nil)
-check('recuento real', byName.phone_messages and byName.phone_messages.count == 184, byName.phone_messages and byName.phone_messages.count)
-check('la principal va bloqueada', byName.players.locked == true and byName.players.selected == true)
+check('discovered tables with no rows are hidden', byName.mdt_convictions == nil)
+check('the ignore list is honoured (bans)', byName.bans == nil)
+check('hyphenated table names are accepted', byName['21-robberies_evidence'] ~= nil)
+check('real row count', byName.phone_messages and byName.phone_messages.count == 184, byName.phone_messages and byName.phone_messages.count)
+check('the main table is locked', byName.players.locked == true and byName.players.selected == true)
 
-print('\n== filas ==')
-check('clave primaria detectada', byName.player_vehicles.key == 'id', byName.player_vehicles.key)
-check('sin clave primaria de una columna no hay filas sueltas', byName.player_groups.key == nil, byName.player_groups.key)
-check('las filas traen su id', byName.player_vehicles.rows[1] and byName.player_vehicles.rows[1].id == '1',
+print('\n== rows ==')
+check('primary key detected', byName.player_vehicles.key == 'id', byName.player_vehicles.key)
+check('no single-column key means no per-row selection', byName.player_groups.key == nil, byName.player_groups.key)
+check('rows carry their id', byName.player_vehicles.rows[1] and byName.player_vehicles.rows[1].id == '1',
     byName.player_vehicles.rows[1] and byName.player_vehicles.rows[1].id)
-check('muestra limitada a Config.Preview.MaxRows', #byName.phone_messages.rows == 25, #byName.phone_messages.rows)
-check('columnas automáticas sin la de enlace', (function()
+check('sample capped at Config.Preview.MaxRows', #byName.phone_messages.rows == 25, #byName.phone_messages.rows)
+check('auto columns exclude the link column', (function()
     for _, column in ipairs(byName.twitter_accounts.columns) do
         if column == 'citizenid' then return false end
     end
@@ -258,60 +257,60 @@ end)())
 queries = {}
 events['21-easyck:ui:rows']('phone_messages', 'ABC12345')
 local rows = last('21-easyck:ui:rows')
-check('carga todas las filas de una tabla', rows and #rows.rows == 184, rows and #rows.rows)
+check('loads every row of a table', rows and #rows.rows == 184, rows and #rows.rows)
 
-print('\n== CK con selección de tablas y de filas ==')
+print('\n== CK with a table and row selection ==')
 queries = {}
 events['21-easyck:ui:execute']('ABC12345', 'Motivo de prueba', {
-    { table = 'player_vehicles', ids = { '2', '5' } },   -- solo dos coches
-    { table = 'twitter_accounts' },                      -- la cuenta entera
-    { table = 'tabla_inventada' },                       -- no existe: se ignora
+    { table = 'player_vehicles', ids = { '2', '5' } },   -- only two cars
+    { table = 'twitter_accounts' },                      -- the whole table
+    { table = 'tabla_inventada' },                       -- does not exist: ignored
 })
 local result = last('21-easyck:ui:result')
-check('CK correcto', result.ok == true, result.message)
+check('CK succeeded', result.ok == true, result.message)
 
 local hit = touched(queries)
-check('borra la tabla detectada elegida', hit.twitter_accounts ~= nil)
-check('borra siempre la principal', hit.players ~= nil)
-check('no toca lo que no se ha marcado', hit.phone_messages == nil and hit.playerskins == nil and hit.npwd_messages == nil)
-check('ignora tablas inventadas', hit.tabla_inventada == nil)
-check('borra solo las filas marcadas', hit.player_vehicles and hit.player_vehicles:find('`id` IN %(%?, %?%)') ~= nil,
+check('deletes the selected discovered table', hit.twitter_accounts ~= nil)
+check('always deletes the main table', hit.players ~= nil)
+check('leaves unticked tables alone', hit.phone_messages == nil and hit.playerskins == nil and hit.npwd_messages == nil)
+check('ignores made-up tables', hit.tabla_inventada == nil)
+check('deletes only the ticked rows', hit.player_vehicles and hit.player_vehicles:find('`id` IN %(%?, %?%)') ~= nil,
     hit.player_vehicles)
-check('el borrado por filas sigue atado al personaje',
+check('per-row delete stays scoped to the character',
     hit.player_vehicles and hit.player_vehicles:find('`citizenid` = %?') ~= nil)
 
 local insert
 for _, q in ipairs(queries) do if q:find('^INSERT INTO easy_ck_log') then insert = q end end
-check('deja constancia de lo conservado y lo parcial', insert and insert:find('kept_tables') ~= nil)
+check('logs what was kept and what was partial', insert and insert:find('kept_tables') ~= nil)
 
-print('\n== la ejecución exige vista previa ==')
+print('\n== execution requires a preview ==')
 events['21-easyck:ui:execute']('ABC12345', 'otra vez', { { table = 'player_vehicles' } })
-check('segunda ejecución rechazada', last('21-easyck:ui:result').ok == false, last('21-easyck:ui:result').message)
+check('second execution rejected', last('21-easyck:ui:result').ok == false, last('21-easyck:ui:result').message)
 
-print('\n== export sin interfaz (valores por defecto) ==')
+print('\n== export without the UI (defaults) ==')
 queries = {}
 local ok, affected = resourceExports.CharacterKill('ABC12345', 'Desde otro recurso')
-check('el export sigue funcionando', ok == true, affected)
+check('the export still works', ok == true, affected)
 
 local all = touched(queries)
-check('sin selección borra todo lo vinculado al personaje',
+check('with no selection everything linked is deleted',
     all.players and all.player_vehicles and all.playerskins and all.player_outfits
     and all.player_groups and all.properties and all.phone_messages and all.twitter_accounts
     and all.npwd_messages ~= nil)
-check('sin selección tampoco toca los baneos', all.bans == nil)
-check('sin selección borra también las tablas con guion', all['21-robberies_evidence'] ~= nil)
+check('with no selection bans are still untouched', all.bans == nil)
+check('hyphenated tables are deleted too', all['21-robberies_evidence'] ~= nil)
 
--- Este va al final: deja GuardOk a false a propósito.
-print('\n== el candado salta si se renombra la carpeta ==')
+-- This one goes last: it leaves GuardOk false on purpose.
+print('\n== the lock trips when the folder is renamed ==')
 local realName = GetCurrentResourceName
 function GetCurrentResourceName() return 'freeck-vendido-en-tebex' end
 dofile(ROOT .. 'server/guard.lua')
-check('no se carga con otro nombre de carpeta', GuardOk == false)
-check('detiene el recurso', stopped == 'freeck-vendido-en-tebex', stopped)
+check('does not load under another folder name', GuardOk == false)
+check('stops the resource', stopped == 'freeck-vendido-en-tebex', stopped)
 GetCurrentResourceName = realName
 
 if failures > 0 then
-    print(('\n%d comprobaciones han fallado.\n'):format(failures))
+    print(('\n%d checks failed.\n'):format(failures))
     os.exit(1)
 end
-print('\nTodo correcto.\n')
+print('\nAll good.\n')

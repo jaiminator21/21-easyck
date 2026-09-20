@@ -1,18 +1,18 @@
--- Candado de identidad del recurso.
+-- Resource identity lock.
 --
--- La licencia permite usar y modificar el script, pero no revenderlo ni publicarlo
--- como propio. Lo que comprueba esto es que no se le haya cambiado la identidad:
--- el nombre del recurso, los créditos del fxmanifest, los nombres de los eventos y
--- del export, y que siga estando el archivo LICENSE.
+-- The license allows using and modifying this script, but not reselling it or
+-- republishing it as your own. What this file checks is that the identity has not
+-- been changed: the resource name, the fxmanifest credits, the event and export
+-- names, and that the LICENSE file is still there.
 --
--- No es una protección: el código va en claro y se puede quitar. Es un candado que
--- obliga a tocar el script a conciencia para renombrarlo, de forma que nadie pueda
--- decir que lo publicó con otro nombre "sin darse cuenta".
+-- This is not copy protection: the code ships in plain Lua and the lock can be
+-- removed. It only makes renaming the script a deliberate act, so that nobody can
+-- claim they republished it under another name by accident.
 
 local EXPECTED_NAME   = '21-easyck'
 local EXPECTED_AUTHOR = 'Jaime Sebastián'
 
--- Cadenas que tienen que seguir estando tal cual en cada archivo.
+-- Strings that must still be present, verbatim, in each file.
 local MARKERS = {
     ['fxmanifest.lua'] = {
         "name '21-easyck'",
@@ -32,7 +32,7 @@ local MARKERS = {
     },
     ['LICENSE'] = {
         'Copyright (c) 2026 Jaime Sebastián',
-        'Queda expresamente PROHIBIDO',
+        'The following is expressly PROHIBITED',
     },
 }
 
@@ -41,13 +41,13 @@ local resourceName = GetCurrentResourceName()
 local function fail(reason)
     print('^1')
     print('^1  ############################################################^0')
-    print(('^1  %s se ha detenido: %s^0'):format(EXPECTED_NAME, reason))
+    print(('^1  %s stopped: %s^0'):format(EXPECTED_NAME, reason))
     print('^1  ############################################################^0')
-    print(('^3  Este script se distribuye gratis como "%s", de %s.^0'):format(EXPECTED_NAME, EXPECTED_AUTHOR))
-    print('^3  Puedes usarlo y modificarlo, pero no renombrarlo ni publicarlo^0')
-    print('^3  como propio ni venderlo. Condiciones completas en LICENSE.^0')
-    print('^3  Si lo has descargado de una tienda o de un pack de pago, te lo^0')
-    print('^3  han vendido sin permiso: pídelo gratis en el repositorio original.^0')
+    print(('^3  This script is distributed for free as "%s", by %s.^0'):format(EXPECTED_NAME, EXPECTED_AUTHOR))
+    print('^3  You may use and modify it, but not rename it, republish it as your^0')
+    print('^3  own or sell it. Full terms in LICENSE.^0')
+    print('^3  If you got it from a store or a paid bundle, it was sold to you^0')
+    print('^3  without permission: get it for free from the original repository.^0')
     print('^1')
 
     GuardOk = false
@@ -55,28 +55,28 @@ local function fail(reason)
     return false
 end
 
--- Se ejecuta al arrancar. El resto del recurso no hace nada si esto no pasa.
+-- Runs on startup. Nothing else in the resource does anything unless this passes.
 local function verify()
     if resourceName ~= EXPECTED_NAME then
-        return fail(('la carpeta se llama "%s" y tiene que llamarse "%s"'):format(resourceName, EXPECTED_NAME))
+        return fail(('the folder is named "%s" and must be named "%s"'):format(resourceName, EXPECTED_NAME))
     end
 
     if GetResourceMetadata(resourceName, 'name', 0) ~= EXPECTED_NAME then
-        return fail('se ha cambiado el nombre en fxmanifest.lua')
+        return fail('the name in fxmanifest.lua was changed')
     end
 
     if GetResourceMetadata(resourceName, 'author', 0) ~= EXPECTED_AUTHOR then
-        return fail('se han quitado los créditos del autor en fxmanifest.lua')
+        return fail('the author credits were removed from fxmanifest.lua')
     end
 
     for file, markers in pairs(MARKERS) do
         local contents = LoadResourceFile(resourceName, file)
         if not contents or contents == '' then
-            return fail(('falta el archivo %s'):format(file))
+            return fail(('%s is missing'):format(file))
         end
         for _, marker in ipairs(markers) do
             if not contents:find(marker, 1, true) then
-                return fail(('se ha modificado la identidad del script en %s (%s)'):format(file, marker))
+                return fail(("the script's identity was altered in %s (%s)"):format(file, marker))
             end
         end
     end

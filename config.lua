@@ -1,97 +1,98 @@
 Config = {}
 
--- Idioma de los mensajes: 'es' | 'en'
+-- Message language: 'es' | 'en'
 Config.Locale = 'es'
 
 -- Framework: 'auto' | 'esx' | 'qbcore' | 'qbox' | 'ox' | 'custom'
--- En 'auto' se detecta según los recursos arrancados (qbx_core > es_extended > qb-core > ox_core).
+-- With 'auto' it is detected from the running resources (qbx_core > es_extended > qb-core > ox_core).
 Config.Framework = 'auto'
 
--- Comandos
+-- Commands
 Config.Command        = 'characterkill'
 Config.ConfirmCommand = 'ckconfirm'
 Config.CancelCommand  = 'ckcancel'
--- Abre la interfaz con la lista de jugadores y la vista previa de lo que se va a borrar
+-- Opens the UI: player list plus a preview of everything that will be deleted
 Config.MenuCommand    = 'ckmenu'
--- Tecla por defecto para la interfaz ('' para no asignar ninguna). El jugador puede cambiarla en Ajustes > Teclado.
+-- Default key for the UI ('' for none). Players can rebind it in Settings > Key Bindings.
 Config.MenuKeybind    = ''
 
--- Escribe en la consola (F8 en el cliente, consola del servidor) cada paso de la
--- interfaz. Útil si /ckmenu no abre nada.
+-- Logs every step of the UI to the console (F8 on the client, server console).
+-- Useful when /ckmenu does not open anything.
 Config.Debug = false
 
--- Segundos que tiene el staff para confirmar el CK
+-- Seconds the staff member has to confirm the CK
 Config.ConfirmTimeout = 30
 
--- Obliga a escribir un motivo: /characterkill <id> <motivo>
+-- Forces a reason to be given: /characterkill <id> <reason>
 Config.RequireReason = false
 
--- Permisos. La consola del servidor siempre tiene permiso.
+-- Permissions. The server console is always allowed.
 Config.Permissions = {
     -- add_ace group.admin easyck.use allow
     Ace = 'easyck.use',
-    -- Grupos del framework que también pueden usarlo (ESX getGroup / QBCore HasPermission / ACE group.<nombre>)
+    -- Framework groups that may also use it (ESX getGroup / QBCore HasPermission / ACE group.<name>)
     Groups = { 'admin', 'superadmin', 'god' },
 }
 
--- Autodetección: 21-easyck recorre TODA la base de datos y se queda con cualquier
--- tabla que tenga una columna con el ID del personaje (en Qbox/QB el `citizenid`).
--- Ese ID es el identificador principal: lo que se busca en la base de datos es su
--- valor, así que una columna que no contenga ese ID sale con 0 filas y no se muestra.
--- Así aparecen también las tablas de scripts que no has puesto a mano: teléfono,
--- redes sociales, casas, tatuajes, trabajos, facturas...
+-- Auto-discovery: 21-easyck walks the WHOLE database and keeps every table that has
+-- a column holding the character id (`citizenid` on Qbox/QB).
+-- That id is the primary identifier: what is looked up in the database is its VALUE,
+-- so a column that does not hold it comes back with 0 rows and is never shown.
+-- This is how tables you never listed by hand show up too: phone, social media,
+-- houses, tattoos, jobs, invoices...
 Config.Discovery = {
     Enabled = true,
 
-    -- Cualquier columna cuyo nombre CONTENGA uno de estos textos se considera un
-    -- vínculo con el personaje. Cubre nombres como `citizenid`, `owner_citizenid`,
+    -- Any column whose name CONTAINS one of these strings counts as a link to the
+    -- character. Covers names such as `citizenid`, `owner_citizenid`,
     -- `sender_citizenid`, `target_cid`, `player_charid`...
-    -- Al nombre de la columna principal del framework se le añade solo.
+    -- The main column of your framework is added to this list automatically.
     Patterns = {
         'citizenid', 'citizen_id', 'charid', 'char_id', 'identifier',
         'stateid', 'state_id', 'cid',
     },
 
-    -- Nombres exactos de columnas que no llevan ninguno de esos textos.
-    -- Que sobren no molesta: si no contienen el ID del personaje, salen a 0 filas
-    -- y no se enseñan.
+    -- Exact column names that do not contain any of those strings.
+    -- Extra entries do no harm: if they do not hold the character id, they come back
+    -- with 0 rows and are not shown.
     Columns = { 'owner', 'holder', 'player', 'character', 'character_id', 'user' },
 
-    -- Si una tabla tiene varias columnas válidas (por ejemplo emisor y receptor en
-    -- los mensajes del teléfono), se cuentan y se borran las filas de todas ellas.
+    -- When a table has several matching columns (sender and receiver in phone
+    -- messages, for example), rows from all of them are counted and deleted.
 
-    -- Tablas que nunca se tocan aunque tengan una de esas columnas.
-    -- Los baneos y los avisos del staff van aquí a propósito: si se borraran con el CK,
-    -- cualquiera se quitaría un baneo haciéndose un personaje nuevo. Quita de la lista
-    -- lo que quieras que sí se borre.
+    -- Tables that are never touched, even if they have one of those columns.
+    -- Bans and staff warnings are here on purpose: if a CK wiped them, anyone could
+    -- clear a ban by making a new character. Remove from this list whatever you do
+    -- want deleted.
     Ignore = {
         'easy_ck_log',
         'bans', 'ban', 'banlist', 'ban_list', 'easyadmin_bans', 'txadmin_bans',
         'warnings', 'warns', 'player_warns', 'playerwarnings', 'admin_logs', 'logs',
     },
 
-    -- Las tablas detectadas salen marcadas para borrar. Ponlo en false si prefieres
-    -- revisarlas una a una antes de cada CK.
+    -- Discovered tables come pre-ticked for deletion. Set this to false if you would
+    -- rather review them one by one before each CK.
     DefaultSelected = true,
 }
 
--- Vista previa de la interfaz: qué se le muestra al staff antes de confirmar el CK.
+-- UI preview: what the staff member sees before confirming the CK.
 Config.Preview = {
-    -- Filas de detalle que se envían por tabla al abrir la ficha
-    -- (el recuento siempre es el total real)
+    -- Detail rows sent per table when the character sheet opens
+    -- (the row count is always the real total)
     MaxRows = 25,
 
-    -- Filas que se envían al pulsar "cargar todas las filas" de una tabla,
-    -- que es cuando se pueden marcar y desmarcar una a una
+    -- Rows sent when "load every row" is pressed on a table, which is when rows can
+    -- be ticked and unticked individually
     MaxRowsExpanded = 500,
 
-    -- Etiqueta, columnas y estado por defecto de cada tabla. Las tablas que no estén aquí
-    -- salen igualmente con su nombre y su número de filas.
-    --   label   = nombre que se muestra en la interfaz
-    --   columns = columnas del detalle (las que no existan en tu BD se ignoran)
-    --   default = false -> la casilla sale desmarcada, así que NO se borra salvo que el staff la marque.
-    --             Afecta también al comando /characterkill, que respeta estos valores por defecto.
-    -- La tabla principal del personaje siempre se borra y no se puede desmarcar.
+    -- Label, columns and default state per table. Tables that are not listed here
+    -- still show up, with their raw name and their row count.
+    --   label   = name shown in the UI
+    --   columns = detail columns (any that do not exist in your database are ignored)
+    --   default = false -> the checkbox starts unticked, so it is NOT deleted unless
+    --             the staff member ticks it. The /characterkill command honours these
+    --             defaults too.
+    -- The character's main table is always deleted and cannot be unticked.
     Tables = {
         players         = { label = 'Personaje',       columns = { 'citizenid', 'name', 'money', 'job' } },
         users           = { label = 'Personaje',       columns = { 'identifier', 'firstname', 'lastname', 'accounts' } },
@@ -123,32 +124,32 @@ Config.Preview = {
     },
 }
 
--- Milisegundos que se espera tras expulsar al jugador para que el framework
--- termine de guardar sus datos ANTES de borrarlos (si no, el guardado podría recrear el personaje).
+-- Milliseconds to wait after kicking the player so the framework finishes saving
+-- their data BEFORE it is deleted (otherwise that save could recreate the character).
 Config.SaveDelay = 3000
 
--- Guarda una copia JSON de todas las filas borradas en la tabla `easy_ck_log` (permite restaurar a mano)
+-- Stores a JSON copy of every deleted row in the `easy_ck_log` table (allows manual restore)
 Config.Backup = true
 
--- Webhook de Discord para registrar los CK ('' para desactivar)
+-- Discord webhook to log every CK ('' to disable)
 Config.Webhook      = ''
 Config.WebhookName  = 'Easy CK'
 Config.WebhookColor = 15158332
 
--- Notificación al staff. Por defecto usa el chat. Puedes sustituirla por la de tu framework:
+-- Staff notification. Uses the chat by default. Swap it for your framework's:
 -- Config.Notify = function(src, msg, kind) TriggerClientEvent('ox_lib:notify', src, { description = msg, type = kind }) end
 Config.Notify = nil
 
 --[[
-    Tablas que se borran en cada framework.
-      table   = nombre de la tabla
-      column  = columna que contiene el ID del personaje (identifier / citizenid / charId)
-      main    = tabla principal del personaje (se usa para buscarlo y se borra la última)
-      update  = en lugar de DELETE, hace UPDATE <table> SET <update> (borrado lógico)
-      filter  = condición extra al buscar el personaje en la tabla principal
+    Tables deleted for each framework.
+      table   = table name
+      column  = column holding the character id (identifier / citizenid / charId)
+      main    = the character's main table (used to look them up, deleted last)
+      update  = run UPDATE <table> SET <update> instead of DELETE (soft delete)
+      filter  = extra condition when looking the character up in the main table
 
-    Las tablas que no existan en tu base de datos se ignoran automáticamente.
-    Añade aquí las tablas de tus scripts (teléfono, casas, facturas...).
+    Tables that do not exist in your database are skipped automatically.
+    Add your own scripts' tables here (phone, houses, invoices...).
 ]]
 Config.Tables = {
     esx = {
@@ -187,9 +188,9 @@ Config.Tables = {
     },
 
     ox = {
-        -- ox_core marca los personajes como borrados en lugar de eliminarlos
+        -- ox_core flags characters as deleted instead of removing them
         { table = 'characters', column = 'charId', main = true, update = 'deleted = CURDATE()', filter = 'deleted IS NULL' },
-        -- Descomenta para eliminar también sus datos asociados:
+        -- Uncomment to delete their related data as well:
         -- { table = 'vehicles',            column = 'owner' },
         -- { table = 'character_inventory', column = 'charId' },
         -- { table = 'character_groups',    column = 'charId' },
@@ -201,8 +202,8 @@ Config.Tables = {
     },
 }
 
--- Solo si Config.Framework = 'custom': cómo obtener el ID del personaje de un jugador conectado
--- y cómo mostrar su nombre a partir de la fila de la tabla principal.
+-- Only when Config.Framework = 'custom': how to get the character id of an online
+-- player, and how to render their name from the main table row.
 Config.Custom = {
     GetCharId = function(src)
         return Player(src).state.charId
@@ -210,6 +211,6 @@ Config.Custom = {
     GetName = function(row)
         return ('%s %s'):format(row.firstname or '?', row.lastname or '')
     end,
-    -- 'string' o 'number', según el tipo de la columna del ID en la base de datos
+    -- 'string' or 'number', matching the type of the id column in the database
     IdType = 'string',
 }

@@ -1,8 +1,8 @@
 /* 21-easyck --------------------------------------------------------------
-   Misma linea grafica que 21-hud y 21-garages: grafito, linea de 1px,
-   titulos en versalitas, barrita de acento en la cabecera y el acento
-   marcando lo activo. Aqui el acento es rojo porque todo lo que hace este
-   panel es destructivo.
+   Same visual language as 21-hud and 21-garages: graphite, 1px hairlines,
+   small-caps headings, an accent bar in the header and the accent marking
+   whatever is active. Here the accent is red, because everything this panel
+   does is destructive.
 ------------------------------------------------------------------------ */
 
 :root {
@@ -72,7 +72,7 @@ body {
     to   { opacity: 1; transform: none; }
 }
 
-/* ── Cabecera ────────────────────────────────────────────────────────── */
+/* ── Header ─────────────────────────────────────────────────────────── */
 
 .panel-head {
     display: flex;
@@ -139,7 +139,7 @@ body {
 
 .icon-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-/* ── Cuerpo ──────────────────────────────────────────────────────────── */
+/* ── Body ───────────────────────────────────────────────────────────── */
 
 .panel-body {
     flex: 1;
@@ -148,7 +148,7 @@ body {
     min-height: 0;
 }
 
-/* ── Barra lateral ───────────────────────────────────────────────────── */
+/* ── Sidebar ────────────────────────────────────────────────────────── */
 
 .sidebar {
     display: flex;
@@ -302,7 +302,7 @@ body {
 
 .list-empty { padding: 28px 14px; text-align: center; font-size: 13px; color: var(--faint); }
 
-/* ── Contenido ───────────────────────────────────────────────────────── */
+/* ── Content ────────────────────────────────────────────────────────── */
 
 .content { display: flex; flex-direction: column; min-height: 0; }
 
@@ -348,9 +348,9 @@ body {
     gap: 16px;
 }
 
-/* Sin esto las tarjetas se encogen para caber en la columna flex y la lista de
-   tablas se queda recortada en vez de desbordar: nunca aparece la barra de
-   desplazamiento. Deben conservar su alto y dejar que scrollee el contenedor. */
+/* Without this the cards shrink to fit the flex column and the table list gets
+   clipped instead of overflowing, so the scrollbar never appears. They must keep
+   their height and let the container scroll. */
 .preview > * { flex: 0 0 auto; }
 
 .card {
@@ -360,7 +360,7 @@ body {
     overflow: hidden;
 }
 
-/* Ficha del personaje */
+/* Character sheet */
 
 .char-card { padding: 16px 18px; }
 
@@ -402,7 +402,7 @@ body {
 
 .field-value { margin-top: 3px; font-size: 14px; word-break: break-word; }
 
-/* Tablas */
+/* Tables */
 
 .card-head {
     display: flex;
@@ -458,10 +458,10 @@ body {
 .check.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .check.locked { background: var(--bg-hover); border-color: #39404f; color: var(--dim); }
 
-/* Selección parcial: la tabla no va entera, solo las filas marcadas */
+/* Partial selection: not the whole table, only the ticked rows */
 .check.partial { background: var(--warn); border-color: var(--warn); color: #14171c; font-weight: 700; }
 
-/* Casilla de cada fila */
+/* Per-row checkbox */
 .row-check {
     width: 16px;
     height: 16px;
@@ -546,7 +546,7 @@ td {
 
 th.pick, td.pick { width: 26px; padding-right: 10px; }
 
-/* Fila desmarcada: se ve que se queda */
+/* Unticked row: visibly kept */
 tr.unchecked td { opacity: .35; }
 
 .rows-more,
@@ -554,7 +554,7 @@ tr.unchecked td { opacity: .35; }
 
 .rows-more { display: flex; align-items: center; gap: 10px; }
 
-/* ── Pie ─────────────────────────────────────────────────────────────── */
+/* ── Footer ─────────────────────────────────────────────────────────── */
 
 .actions {
     display: flex;
@@ -635,7 +635,7 @@ tr.unchecked td { opacity: .35; }
     color: var(--faint);
 }
 
-/* ── Aviso ───────────────────────────────────────────────────────────── */
+/* ── Toast ──────────────────────────────────────────────────────────── */
 
 .toast {
     position: absolute;
@@ -655,7 +655,7 @@ tr.unchecked td { opacity: .35; }
 .toast.ok { border-color: rgba(47, 191, 113, .5); color: #9de8c2; }
 .toast.err { border-color: var(--accent-dim); color: var(--accent-lift); }
 
-/* ── Barras de desplazamiento ────────────────────────────────────────── */
+/* ── Scrollbars ─────────────────────────────────────────────────────── */
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }

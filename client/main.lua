@@ -1,7 +1,7 @@
--- Mismo candado que en server/guard.lua: si se ha renombrado la carpeta, el
--- cliente no registra ni el comando ni la interfaz.
+-- Same lock as server/guard.lua: if the folder was renamed, the client registers
+-- neither the command nor the UI.
 if GetCurrentResourceName() ~= '21-easyck' then
-    print('^121-easyck: la carpeta del recurso se ha renombrado, el script no se carga.^0')
+    print('^121-easyck: the resource folder was renamed, the script will not load.^0')
     return
 end
 
@@ -21,13 +21,13 @@ local function closeUi()
 end
 
 ---------------------------------------------------------------------------
--- Comando y tecla para abrir la interfaz. El permiso se comprueba en el
--- servidor; aquí solo se pide abrirla.
+-- Command and key binding that open the UI. Permission is checked on the server;
+-- all this does is ask for it.
 ---------------------------------------------------------------------------
 
 RegisterCommand(Config.MenuCommand, function()
     if uiOpen then return closeUi() end
-    debug('/' .. Config.MenuCommand .. ' -> pidiendo la interfaz al servidor')
+    debug('/' .. Config.MenuCommand .. ' -> asking the server for the UI')
     TriggerServerEvent('21-easyck:ui:request')
 end, false)
 
@@ -46,11 +46,11 @@ CreateThread(function()
 end)
 
 ---------------------------------------------------------------------------
--- Respuestas del servidor -> interfaz
+-- Server responses -> UI
 ---------------------------------------------------------------------------
 
 RegisterNetEvent('21-easyck:ui:open', function(data)
-    debug(('el servidor ha respondido: %s jugadores'):format(#(data.players or {})))
+    debug(('server replied: %s players'):format(#(data.players or {})))
     uiOpen = true
     SetNuiFocus(true, true)
     SendNUIMessage({ action = 'open', data = data })
@@ -77,7 +77,7 @@ RegisterNetEvent('21-easyck:ui:result', function(data)
 end)
 
 ---------------------------------------------------------------------------
--- Interfaz -> servidor
+-- UI -> server
 ---------------------------------------------------------------------------
 
 RegisterNUICallback('close', function(_, cb)
@@ -110,7 +110,7 @@ RegisterNUICallback('execute', function(data, cb)
     cb(1)
 end)
 
--- Si el recurso se reinicia con la interfaz abierta, no dejar el ratón bloqueado.
+-- If the resource restarts while the UI is open, do not leave the cursor locked.
 AddEventHandler('onResourceStop', function(resource)
     if resource == GetCurrentResourceName() then
         SetNuiFocus(false, false)

@@ -1,10 +1,10 @@
--- Adaptadores por framework. Cada uno expone:
---   getCharId(src)     -> ID del personaje cargado por el jugador (o nil)
---   getName(row)       -> nombre legible a partir de la fila de la tabla principal
---   getOnlineInfo(src) -> { name, job } del jugador conectado, sin tocar la base de datos (opcional)
---   getSummary(row)    -> lista de { label, value } que se muestra en la ficha de la interfaz
---   hasGroup(src)      -> true si el jugador pertenece a alguno de Config.Permissions.Groups
---   list               -> { search = { columnas donde buscar }, order = 'columna' } para la pestaña "Todos"
+-- Per-framework adapters. Each one exposes:
+--   getCharId(src)     -> id of the character the player has loaded (or nil)
+--   getName(row)       -> readable name built from the main table row
+--   getOnlineInfo(src) -> { name, job } of an online player, without hitting the database (optional)
+--   getSummary(row)    -> list of { key, value } shown on the character sheet
+--   hasGroup(src)      -> true when the player belongs to one of Config.Permissions.Groups
+--   list               -> { search = { columns to search }, order = 'column' } for the "All" tab
 --   idType             -> 'string' | 'number'
 
 local function aceGroup(src)
@@ -41,8 +41,8 @@ local function money(amount)
     return ('%s$%s'):format(sign, formatted)
 end
 
--- Añade el campo solo si tiene valor, para que la ficha no se llene de huecos.
--- `key` es la clave del texto en locales.lua (ui.f_*), la interfaz la traduce.
+-- Adds the field only when it has a value, so the sheet is not full of blanks.
+-- `key` is the string key in locales.lua (ui.f_*); the UI translates it.
 local function field(list, key, value)
     if value == nil or value == '' then return end
     list[#list + 1] = { key = key, value = tostring(value) }
@@ -101,7 +101,7 @@ Adapters.esx = function()
 end
 
 ---------------------------------------------------------------------------
--- QBCore / Qbox (mismo esquema de base de datos)
+-- QBCore / Qbox (same database schema)
 ---------------------------------------------------------------------------
 
 local function charinfoName(row)
@@ -215,7 +215,7 @@ Adapters.ox = function()
 end
 
 ---------------------------------------------------------------------------
--- Personalizado
+-- Custom
 ---------------------------------------------------------------------------
 
 Adapters.custom = function()
@@ -254,13 +254,13 @@ function LoadBridge()
     if framework == 'auto' then
         framework = detect()
         if not framework then
-            error('[21-easyck] No se ha detectado ningún framework. Define Config.Framework (usa "custom" si tienes uno propio).')
+            error('[21-easyck] No framework detected. Set Config.Framework (use "custom" for your own).')
         end
     end
 
     local factory = Adapters[framework]
     if not factory then
-        error(('[21-easyck] Framework no soportado: %s'):format(tostring(framework)))
+        error(('[21-easyck] Unsupported framework: %s'):format(tostring(framework)))
     end
 
     local bridge = factory()
@@ -271,7 +271,7 @@ function LoadBridge()
         if t.main then bridge.mainTable = t end
     end
     if not bridge.mainTable then
-        error(('[21-easyck] Config.Tables.%s necesita una tabla con main = true'):format(framework))
+        error(('[21-easyck] Config.Tables.%s needs a table with main = true'):format(framework))
     end
 
     return bridge

@@ -1,12 +1,12 @@
 local resourceName = GetCurrentResourceName()
 local Bridge
-local pending = {}     -- [staffSrc] = { charId, name, reason, expires } (flujo por chat)
-local uiPending = {}   -- [staffSrc] = { charId, name, expires } (flujo por interfaz)
-local lastRequest = {} -- [staffSrc] = último GetGameTimer(), anti-spam de la interfaz
-local busy = {}        -- [charId] = true mientras se ejecuta un CK
+local pending = {}     -- [staffSrc] = { charId, name, reason, expires } (chat flow)
+local uiPending = {}   -- [staffSrc] = { charId, name, expires } (UI flow)
+local lastRequest = {} -- [staffSrc] = last GetGameTimer(), UI rate limiting
+local busy = {}        -- [charId] = true while a CK is running
 
 ---------------------------------------------------------------------------
--- Utilidades
+-- Helpers
 ---------------------------------------------------------------------------
 
 local function notify(src, msg, kind)
@@ -31,15 +31,15 @@ local function hasPermission(src)
     return Bridge.hasGroup(src) == true
 end
 
--- Nombres de tabla y de columna entre acentos graves. MySQL admite ahí casi
--- cualquier cosa (guiones, espacios, puntos), así que los recursos que se llaman
--- `21-robberies_evidence` valen; lo que no se acepta es un acento grave ni
--- caracteres de control, que es lo único con lo que se podría escapar de las comillas.
+-- Table and column names wrapped in backticks. MySQL accepts almost anything in
+-- there (hyphens, spaces, dots), so tables from resources named like
+-- `21-robberies_evidence` work fine; what is rejected is a backtick or a control
+-- character, the only things that could break out of the quoting.
 local function quotable(name)
     return type(name) == 'string'
         and name ~= ''
         and #name <= 64
-        and not name:find('[%c`]') -- %c = caracteres de control
+        and not name:find('[%c`]') -- %c = control characters
 end
 
 local function ident(name)
@@ -59,8 +59,8 @@ local function tableExists(name)
     return existsCache[name]
 end
 
--- Columnas de una tabla: nombre, tipo y si forma parte de la clave primaria.
--- Se consulta una sola vez por tabla.
+-- Columns of a table: name, type and whether they are part of the primary key.
+-- Queried once per table.
 local columnsCache = {}
 local function tableColumns(name)
     if not columnsCache[name] then
@@ -92,15 +92,15 @@ local function columnsOf(name)
     return tableColumns(name).set
 end
 
--- Solo se pueden borrar filas sueltas si la tabla tiene una clave primaria de una
--- sola columna; con claves compuestas o sin clave, la tabla va entera o no va.
+-- Individual rows can only be deleted when the table has a single-column primary
+-- key; with composite keys or none, the table goes whole or not at all.
 local function primaryKeyOf(name)
     local keys = tableColumns(name).keys
     return #keys == 1 and keys[1] or nil
 end
 
--- Columnas que se enseñan en el detalle de una tabla detectada automáticamente:
--- las primeras que no sean un campo enorme.
+-- Columns shown in the detail view of an auto-discovered table: the first ones
+-- that are not a huge field.
 local SKIP_TYPES = { blob = true, longblob = true, mediumblob = true, tinyblob = true,
                      json = true, longtext = true, mediumtext = true }
 
@@ -122,12 +122,12 @@ local function previewConfig(name)
     return (Config.Preview and Config.Preview.Tables or {})[name] or {}
 end
 
--- Una tabla se borra por defecto salvo que en Config.Preview.Tables tenga default = false.
+-- A table is deleted by default unless Config.Preview.Tables marks it default = false.
 local function selectedByDefault(name)
     return previewConfig(name).default ~= false
 end
 
--- Valor tal y como se enseña en la interfaz.
+-- A value as it is shown in the UI.
 local function cell(value)
     if value == nil then return '' end
     if type(value) == 'table' then value = json.encode(value) end
@@ -137,13 +137,13 @@ local function cell(value)
 end
 
 ---------------------------------------------------------------------------
--- Escaneo de la base de datos
+-- Database scan
 ---------------------------------------------------------------------------
 
--- Busca en TODA la base de datos cualquier columna que pueda contener el ID del
--- personaje: por patrón en el nombre (citizenid, owner_citizenid, target_cid...)
--- y por nombres exactos. Una tabla puede tener varias (emisor y receptor, por
--- ejemplo) y se quedan todas. Se consulta una sola vez por arranque.
+-- Searches the WHOLE database for any column that could hold the character id:
+-- by name pattern (citizenid, owner_citizenid, target_cid...) and by exact names.
+-- A table can have several (sender and receiver, for instance) and all of them are
+-- kept. Queried once per startup.
 local discoveryCache
 local function discoverTables()
     if not (Config.Discovery and Config.Discovery.Enabled) then return {} end
@@ -152,7 +152,7 @@ local function discoverTables()
 
     local conditions, params = {}, {}
 
-    -- El nombre de la columna principal del framework siempre cuenta.
+    -- The framework's main column always counts.
     local patterns, seen = {}, {}
     local function addPattern(value)
         value = tostring(value or ''):lower()
@@ -186,7 +186,7 @@ local function discoverTables()
         ignore[tostring(name):lower()] = true
     end
     for _, t in ipairs(Bridge.tables) do
-        ignore[t.table:lower()] = true -- ya está en Config.Tables, con su etiqueta y su orden
+        ignore[t.table:lower()] = true -- already in Config.Tables, with its label and order
     end
 
     local ok, rows = pcall(MySQL.query.await, ([[
@@ -201,7 +201,7 @@ local function discoverTables()
     ]]):format(table.concat(conditions, ' OR ')), params)
 
     if not ok then
-        print(('[21-easyck] ^3No se ha podido escanear la base de datos: %s^0'):format(tostring(rows)))
+        print(('[21-easyck] ^3Could not scan the database: %s^0'):format(tostring(rows)))
         return discoveryCache
     end
 
@@ -229,15 +229,15 @@ local function discoverTables()
         for _, entry in ipairs(discoveryCache) do
             names[#names + 1] = ('%s(%s)'):format(entry.table, table.concat(entry.columns, ','))
         end
-        print(('[21-easyck] escaneo: %s tablas con vínculo al personaje además de las configuradas: %s')
+        print(('[21-easyck] scan: %s tables linked to the character on top of the configured ones: %s')
             :format(#discoveryCache, table.concat(names, ' ')))
     end
 
     return discoveryCache
 end
 
--- Tablas configuradas (en su orden) + las detectadas. Es la lista con la que se
--- pinta la vista previa y con la que se borra.
+-- Configured tables (in their order) + discovered ones. This is the list the
+-- preview is built from and the one that gets deleted.
 local function targetTables()
     local list = {}
     for _, t in ipairs(Bridge.tables) do
@@ -249,8 +249,8 @@ local function targetTables()
     return list
 end
 
--- Columnas de una tabla que apuntan al personaje. Las configuradas tienen una;
--- las detectadas pueden tener varias (emisor y receptor de un mensaje, por ejemplo).
+-- Columns of a table pointing at the character. Configured ones have a single
+-- column; discovered ones may have several (message sender and receiver, say).
 local function linkColumns(entry)
     return entry.columns or { entry.column }
 end
@@ -268,7 +268,7 @@ local function whereFor(entry)
     return where
 end
 
--- Un valor del ID por cada columna de la condición, en el mismo orden.
+-- One copy of the id per column in the condition, in the same order.
 local function paramsFor(entry, charId)
     local params = {}
     for _ = 1, #linkColumns(entry) do
@@ -277,8 +277,8 @@ local function paramsFor(entry, charId)
     return params
 end
 
--- Cuenta las filas de todas las tablas de golpe: una consulta por cada 15 tablas
--- en vez de una por tabla, que con una base de datos grande se nota.
+-- Counts rows for every table at once: one query per 15 tables instead of one per
+-- table, which makes a real difference on a large database.
 local function countRows(entries, charId)
     local counts = {}
     local selects, params, chunk = {}, {}, {}
@@ -315,8 +315,8 @@ local function countRows(entries, charId)
     return counts
 end
 
--- Filas de una tabla para la interfaz: la clave primaria (para poder marcar filas
--- sueltas) y unas pocas columnas legibles.
+-- Rows of a table for the UI: the primary key (so individual rows can be ticked)
+-- plus a few readable columns.
 local function fetchRows(entry, charId, limit)
     local info = tableColumns(entry.table)
     local key = primaryKeyOf(entry.table)
@@ -348,7 +348,7 @@ local function fetchRows(entry, charId, limit)
             table.concat(selects, ', '), ident(entry.table), whereFor(entry), limit),
         paramsFor(entry, charId))
     if not ok then
-        print(('[21-easyck] ^3No se han podido leer las filas de %s: %s^0'):format(entry.table, tostring(rows)))
+        print(('[21-easyck] ^3Could not read rows from %s: %s^0'):format(entry.table, tostring(rows)))
         return columns, {}, key
     end
 
@@ -398,10 +398,10 @@ local function staffInfo(src)
     return GetPlayerName(src) or ('ID ' .. src), GetPlayerIdentifierByType(src, 'license') or 'unknown'
 end
 
--- Resuelve lo que escribe el staff:
---   "12"      -> jugador en línea con ID 12 (si no lo hay, se trata como ID de personaje)
---   "cid:XYZ" -> ID de personaje (citizenid / identifier / charId)
---   "XYZ"     -> ID de personaje
+-- Resolves whatever the staff member typed:
+--   "12"      -> online player with server id 12 (if nobody is online with it, treated as a character id)
+--   "cid:XYZ" -> character id (citizenid / identifier / charId)
+--   "XYZ"     -> character id
 local function resolveTarget(input)
     local explicit = input:match('^cid:(.+)$') or input:match('^char:(.+)$')
 
@@ -448,7 +448,7 @@ end
 -- CK
 ---------------------------------------------------------------------------
 
--- Ejecuta el CK. Debe llamarse dentro de un hilo (usa Wait y consultas await).
+-- Runs the CK. Must be called inside a thread (it uses Wait and await queries).
 local function executeCK(data, staffSrc)
     local key = tostring(data.charId)
     if busy[key] then
@@ -457,19 +457,19 @@ local function executeCK(data, staffSrc)
     busy[key] = true
 
     local ok, result = pcall(function()
-        -- 1. Expulsar al jugador si está conectado y esperar a que el framework guarde,
-        --    para que ese guardado no vuelva a crear el personaje después de borrarlo.
+        -- 1. Kick the player if they are online and wait for the framework to save, so
+        --    that save does not recreate the character right after it is deleted.
         local targetSrc = findOnlineByCharId(data.charId)
         if targetSrc then
             DropPlayer(tostring(targetSrc), L('kick_message', data.reason ~= '' and data.reason or L('no_reason')))
             Wait(Config.SaveDelay)
         end
 
-        -- 2. Qué se toca: tablas configuradas + detectadas, las secundarias primero y
-        --    la principal al final (por las claves foráneas).
-        --    data.tables es { ['player_vehicles'] = true }  -> la tabla entera
-        --                   { ['player_vehicles'] = { ids = { '4', '9' } } } -> solo esas filas
-        --    Sin selección se usan los valores por defecto de la configuración.
+        -- 2. What gets touched: configured + discovered tables, secondary ones first and
+        --    the main one last (because of foreign keys).
+        --    data.tables is { ['player_vehicles'] = true }  -> the whole table
+        --                   { ['player_vehicles'] = { ids = { '4', '9' } } } -> only those rows
+        --    With no selection, the configured defaults are used.
         local selection = data.tables
         local ordered, kept, partial = {}, {}, {}
 
@@ -498,8 +498,8 @@ local function executeCK(data, staffSrc)
         end
         ordered[#ordered + 1] = { entry = Bridge.mainTable }
 
-        -- Cada consulta va siempre acotada al personaje, aunque se borren filas
-        -- sueltas: así una lista de IDs manipulada no puede tocar a otro jugador.
+        -- Every query is always scoped to the character, even when deleting individual
+        -- rows: that way a tampered list of ids cannot touch another player.
         local function clauseFor(job)
             local where = whereFor(job.entry)
             local params = paramsFor(job.entry, data.charId)
@@ -513,7 +513,7 @@ local function executeCK(data, staffSrc)
             return where, params
         end
 
-        -- 3. Copia de seguridad de todo lo que se va a tocar.
+        -- 3. Back up everything that is about to be touched.
         local backup = {}
         if Config.Backup then
             for _, job in ipairs(ordered) do
@@ -523,12 +523,12 @@ local function executeCK(data, staffSrc)
                 if okSelect and rows and #rows > 0 then
                     backup[job.entry.table] = rows
                 elseif not okSelect then
-                    print(('[21-easyck] ^3No se pudo copiar %s: %s^0'):format(job.entry.table, tostring(rows)))
+                    print(('[21-easyck] ^3Could not back up %s: %s^0'):format(job.entry.table, tostring(rows)))
                 end
             end
         end
 
-        -- 4. Borrado.
+        -- 4. Delete.
         local affected, mainAffected = 0, 0
         for _, job in ipairs(ordered) do
             local t = job.entry
@@ -545,15 +545,15 @@ local function executeCK(data, staffSrc)
                 affected = affected + (tonumber(count) or 0)
                 if t == Bridge.mainTable then mainAffected = tonumber(count) or 0 end
             else
-                print(('[21-easyck] ^3Error en %s: %s^0'):format(t.table, tostring(count)))
+                print(('[21-easyck] ^3Error on %s: %s^0'):format(t.table, tostring(count)))
             end
         end
 
         if mainAffected == 0 then
-            error(('no se ha modificado la tabla principal (%s)'):format(Bridge.mainTable.table))
+            error(('the main table was not modified (%s)'):format(Bridge.mainTable.table))
         end
 
-        -- 5. Registro.
+        -- 5. Log.
         local staffName, staffLicense = staffInfo(staffSrc)
         local notes = {}
         if #kept > 0 then notes[#notes + 1] = table.concat(kept, ', ') end
@@ -639,7 +639,7 @@ local function confirm(src)
 end
 
 ---------------------------------------------------------------------------
--- Comandos
+-- Commands
 ---------------------------------------------------------------------------
 
 RegisterCommand(Config.Command, function(src, args)
@@ -675,11 +675,11 @@ AddEventHandler('playerDropped', function()
 end)
 
 ---------------------------------------------------------------------------
--- Interfaz (NUI)
+-- UI (NUI)
 ---------------------------------------------------------------------------
 
--- Anti-spam por jugador y por tipo de petición: dos clics seguidos en el mismo
--- botón no repiten la consulta, pero pedir otra cosa distinta nunca se bloquea.
+-- Rate limiting per player and per request type: two quick clicks on the same
+-- button do not repeat the query, but asking for something else is never blocked.
 local function uiAllowed(src, kind)
     if not Bridge then
         notify(src, L('ui_not_ready'), 'error')
@@ -727,8 +727,7 @@ local function onlinePlayers()
     return list
 end
 
--- Pestaña "Todos": busca en la tabla principal, así salen también los personajes
--- de jugadores desconectados.
+-- "All" tab: searches the main table, so characters of offline players show up too.
 local function listCharacters(search, offset, limit)
     local main = Bridge.mainTable
     local cols = columnsOf(main.table)
@@ -767,11 +766,11 @@ local function listCharacters(search, offset, limit)
 
     local ok, rows = pcall(MySQL.query.await, query, params)
     if not ok then
-        print(('[21-easyck] ^3Error listando personajes: %s^0'):format(tostring(rows)))
+        print(('[21-easyck] ^3Error listing characters: %s^0'):format(tostring(rows)))
         return {}, false
     end
 
-    -- Marca cuáles están conectados ahora mismo.
+    -- Flag the ones who are online right now.
     local onlineByChar = {}
     for _, player in ipairs(onlinePlayers()) do
         if player.charId then onlineByChar[player.charId] = player.id end
@@ -792,8 +791,8 @@ local function listCharacters(search, offset, limit)
     return list, #rows == limit
 end
 
--- Todo lo que se va a borrar del personaje, tabla por tabla. Incluye las tablas
--- configuradas y las que aparecen al escanear la base de datos.
+-- Everything that will be deleted for the character, table by table. Includes both
+-- the configured tables and the ones found by scanning the database.
 local function buildPreview(charId)
     local row = fetchCharacter(charId)
     if not row then
@@ -821,9 +820,9 @@ local function buildPreview(charId)
     for _, entry in ipairs(entries) do
         local count = counts[entry.table] or 0
 
-        -- Las configuradas salen siempre (aunque estén vacías, para que se vea que se
-        -- han mirado). Las detectadas solo si tienen filas de este personaje: si no,
-        -- serían decenas de tablas a cero.
+        -- Configured tables always show up (even when empty, so it is clear they were
+        -- checked). Discovered ones only when they hold rows for this character;
+        -- otherwise it would be dozens of tables at zero.
         if not entry.discovered or count > 0 then
             local cfg = previewConfig(entry.table)
             local columns, rows, key = {}, {}, primaryKeyOf(entry.table)
@@ -843,13 +842,13 @@ local function buildPreview(charId)
             preview.tables[#preview.tables + 1] = {
                 table = entry.table,
                 label = cfg.label or entry.table,
-                links = linkColumns(entry),          -- columnas por las que está vinculado al personaje
+                links = linkColumns(entry),          -- columns linking it to the character
                 count = count,
                 columns = columns,
                 rows = rows,
-                key = key,                           -- sin clave primaria no hay filas sueltas
+                key = key,                           -- no primary key means no per-row selection
                 mode = entry.update and 'update' or 'delete',
-                locked = entry.main == true,         -- la tabla principal siempre se borra entera
+                locked = entry.main == true,         -- the main table is always deleted whole
                 discovered = entry.discovered == true,
                 selected = selected,
             }
@@ -859,9 +858,9 @@ local function buildPreview(charId)
     return preview
 end
 
--- Nunca se hace caso a lo que manda el cliente sin validarlo: la tabla tiene que
--- existir en la configuración o en el escaneo, y los IDs de fila tienen que ser
--- valores sueltos. El borrado por filas siempre se acota además al personaje.
+-- Nothing the client sends is trusted without validation: the table must exist in
+-- the configuration or in the scan, and row ids must be plain scalars. Per-row
+-- deletes are additionally scoped to the character.
 local MAX_IDS = 5000
 
 local function sanitizeSelection(list)
@@ -893,14 +892,14 @@ local function sanitizeSelection(list)
         end
     end
 
-    selection[Bridge.mainTable.table] = true -- el personaje siempre se borra entero
+    selection[Bridge.mainTable.table] = true -- the character itself is always deleted whole
     return selection
 end
 
 RegisterNetEvent('21-easyck:ui:request', function()
     local src = source
     if Config.Debug then
-        print(('[21-easyck] %s (%s) pide la interfaz: bridge=%s permiso=%s'):format(
+        print(('[21-easyck] %s (%s) requested the UI: bridge=%s permission=%s'):format(
             GetPlayerName(src) or '?', src, tostring(Bridge ~= nil), tostring(hasPermission(src))))
     end
     if not uiAllowed(src, 'open') then return end
@@ -945,14 +944,14 @@ RegisterNetEvent('21-easyck:ui:preview', function(target)
 
         local okPreview, preview, previewErr = pcall(buildPreview, charId)
         if not okPreview then
-            print(('[21-easyck] ^1Error al preparar la vista previa: %s^0'):format(tostring(preview)))
+            print(('[21-easyck] ^1Error building the preview: %s^0'):format(tostring(preview)))
             return TriggerClientEvent('21-easyck:ui:preview', src, { error = L('failed', tostring(preview)) })
         end
         if not preview then
             return TriggerClientEvent('21-easyck:ui:preview', src, { error = previewErr })
         end
 
-        -- Testigo de confirmación: solo se puede ejecutar el CK del personaje que se acaba de ver.
+        -- Confirmation token: only the character just previewed can be CK'd.
         uiPending[src] = {
             charId = charId,
             name = preview.name,
@@ -962,7 +961,7 @@ RegisterNetEvent('21-easyck:ui:preview', function(target)
     end)
 end)
 
--- "Cargar todas las filas" de una tabla concreta, para poder marcarlas una a una.
+-- "Load every row" for one table, so rows can be ticked one by one.
 RegisterNetEvent('21-easyck:ui:rows', function(tableName, charId)
     local src = source
     if not uiAllowed(src, 'rows') then return end
@@ -1040,8 +1039,8 @@ RegisterNetEvent('21-easyck:ui:execute', function(charId, reason, tables)
 end)
 
 ---------------------------------------------------------------------------
--- Export para otros recursos (sin confirmación):
---   local ok, result = exports['21-easyck']:CharacterKill('ABC12345', 'Motivo')
+-- Export for other resources (no confirmation step):
+--   local ok, result = exports['21-easyck']:CharacterKill('ABC12345', 'Reason')
 ---------------------------------------------------------------------------
 
 exports('CharacterKill', function(input, reason)
@@ -1060,11 +1059,11 @@ exports('CharacterKill', function(input, reason)
 end)
 
 ---------------------------------------------------------------------------
--- Arranque
+-- Startup
 ---------------------------------------------------------------------------
 
 MySQL.ready(function()
-    if GuardOk ~= true then return end -- ver server/guard.lua
+    if GuardOk ~= true then return end -- see server/guard.lua
 
     Bridge = LoadBridge()
 
@@ -1085,12 +1084,12 @@ MySQL.ready(function()
         )
     ]])
 
-    -- La columna se añadió en la versión 1.1; se crea en instalaciones antiguas.
+    -- This column was added in 1.1; create it on older installs.
     if not columnsOf('easy_ck_log').kept_tables then
         pcall(MySQL.query.await, 'ALTER TABLE `easy_ck_log` ADD COLUMN `kept_tables` TEXT NULL')
         columnsCache['easy_ck_log'] = nil
     end
 
-    print(('[%s] ^2Listo^0 - framework: ^5%s^0, comandos: /%s /%s'):format(
+    print(('[%s] ^2Ready^0 - framework: ^5%s^0, commands: /%s /%s'):format(
         resourceName, Bridge.name, Config.Command, Config.MenuCommand))
 end)

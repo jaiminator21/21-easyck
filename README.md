@@ -189,7 +189,8 @@ Puedes usarlo y modificarlo libremente en tu servidor, y compartirlo **gratis** 
 autoría. **No se puede vender ni revender**, ni suelto ni dentro de un pack, una plantilla de
 servidor o cualquier producto de pago, ni distribuirlo por Tebex o sistemas de escrow.
 
-Los detalles están en [LICENSE](LICENSE). Si quieres hacer algo que no encaje ahí, pídelo.
+Los detalles están en [LICENSE](LICENSE), que es el texto vinculante (en inglés); esto de arriba
+es solo un resumen. Si quieres hacer algo que no encaje ahí, pídelo.
 
 El script comprueba al arrancar que no se le haya cambiado el nombre ni quitado los créditos
 (ver arriba).

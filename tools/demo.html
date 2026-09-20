@@ -6,16 +6,16 @@
 <link rel="stylesheet" href="../html/style.css">
 </head>
 <body>
-<!-- Demo de la interfaz para ajustar el diseño sin levantar el servidor.
-     Carga el html/style.css y el html/app.js de verdad y les envía datos de ejemplo.
+<!-- UI demo, for tweaking the design without starting a server.
+     It loads the real html/style.css and html/app.js and feeds them sample data.
 
-     El navegador no deja leer archivos con file://, así que se sirve la carpeta:
+     Browsers will not read files over file://, so serve the folder instead:
        python3 -m http.server 8000
-     y se abre http://localhost:8000/tools/demo.html -->
+     and open http://localhost:8000/tools/demo.html -->
 <div id="host"></div>
 
 <script>
-// Carga el cuerpo real de html/index.html dentro de esta página.
+// Pulls the real markup from html/index.html into this page.
 fetch('../html/index.html')
     .then((response) => response.text())
     .then((html) => {

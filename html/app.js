@@ -1,11 +1,11 @@
-/* 21-easyck · interfaz NUI ------------------------------------------------
-   Solo pinta y pide datos: todo lo que decide (permisos, que tablas existen,
-   que se borra) lo resuelve el servidor.
+/* 21-easyck · NUI front-end -----------------------------------------------
+   It only renders and asks for data: every decision (permissions, which tables
+   exist, what gets deleted) is made on the server.
 ------------------------------------------------------------------------- */
 
 const RESOURCE = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : '21-easyck';
 
-const HOLD_MS = 1800; // lo que hay que mantener pulsado para lanzar el CK
+const HOLD_MS = 1800; // how long the CK button must be held down
 
 const state = {
     locale: {},
@@ -16,7 +16,7 @@ const state = {
     offset: 0,
     more: false,
     search: '',
-    target: null,     // charId seleccionado
+    target: null,     // selected charId
     preview: null,
     selection: new Set(),
     running: false,
@@ -50,7 +50,7 @@ function escapeHtml(value) {
         .replace(/"/g, '&quot;');
 }
 
-/* ── Textos ─────────────────────────────────────────────────────────── */
+/* ── Strings ────────────────────────────────────────────────────────── */
 
 function applyLocale() {
     $('t-title').textContent = t('title', 'Character Kill');
@@ -76,7 +76,7 @@ function updateSearchPlaceholder() {
     $('search').placeholder = state.tab === 'online' ? t('search', '') : t('search_all', '');
 }
 
-/* ── Lista lateral ──────────────────────────────────────────────────── */
+/* ── Sidebar list ───────────────────────────────────────────────────── */
 
 function renderList() {
     const list = $('list');
@@ -140,7 +140,7 @@ function characterEntries() {
     }));
 }
 
-/* ── Vista previa ───────────────────────────────────────────────────── */
+/* ── Preview ────────────────────────────────────────────────────────── */
 
 function selectTarget(target, charId) {
     state.target = charId || null;
@@ -161,7 +161,7 @@ function renderPreview() {
 
     state.target = preview.charId;
 
-    // Por cada tabla: 'all' (entera), 'rows' (solo las filas marcadas) o 'none'.
+    // Per table: 'all' (whole table), 'rows' (only the ticked rows) or 'none'.
     state.selection = new Map();
     for (const table of preview.tables) {
         state.selection.set(table.table, {
@@ -284,7 +284,8 @@ function renderTable(table) {
     return row;
 }
 
-// Repinta solo la tabla tocada: con cientos de filas abiertas repintarlo todo se nota.
+// Repaints only the table that changed: with hundreds of rows open, repainting
+// everything is noticeable.
 function replaceTable(node, table) {
     const fresh = renderTable(table);
     node.replaceWith(fresh);
@@ -295,8 +296,8 @@ function toggleRow(table, id) {
     const selection = tableState(table.table);
 
     if (selection.mode === 'all') {
-        // Al desmarcar una fila de una tabla entera, se pasa a "solo estas filas":
-        // las que no estén cargadas dejan de estar seleccionadas, y el contador lo enseña.
+        // Unticking a row of a whole table switches it to "only these rows": rows that
+        // are not loaded stop being selected, and the counter says so.
         selection.mode = 'rows';
         selection.ids = new Set(table.rows.map((row) => row.id).filter(Boolean));
     }
@@ -351,7 +352,7 @@ function anySelected() {
     return state.preview.tables.some((table) => selectedCount(table) > 0);
 }
 
-/* ── Ejecutar ───────────────────────────────────────────────────────── */
+/* ── Execute ────────────────────────────────────────────────────────── */
 
 let holdStart = null;
 let holdFrame = null;
@@ -422,7 +423,7 @@ function toast(message, ok) {
     toast.timer = setTimeout(() => el.classList.add('hidden'), 6000);
 }
 
-/* ── Eventos de la interfaz ─────────────────────────────────────────── */
+/* ── UI events ──────────────────────────────────────────────────────── */
 
 $('close').addEventListener('click', close);
 
@@ -500,7 +501,7 @@ function close() {
     post('close');
 }
 
-/* ── Mensajes del cliente ───────────────────────────────────────────── */
+/* ── Messages from the client script ────────────────────────────────── */
 
 window.addEventListener('message', (event) => {
     const { action, data } = event.data || {};
